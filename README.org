@@ -1,0 +1,19 @@
+#+title: WCWC - Wire-Cell Workstation Cluster
+#+export_file_name: index
+
+The WCWC is a computer conglomeration that the Wire-Cell team developed to reduce effort and lower barriers to develop Wire-Cell software.  It defines a simple developer workflow while also supporting novel ways to do work.  It highly leverages Spack to provide software.
+
+The requirements for a user workstation to participate in WCWC are few:
+
+- Run a supported OS (currently Debian 12 / bookworm).
+- Share a LAN with the WCWC server.
+
+Entry points:
+
+- The [[file:docs/wcwc-user.org][WCWC user]] document for things to do on your WCWC user workstation.
+  
+- The [[file:docs/wcwc-system.org][WCWC system]] documents for how to admin the WCWC.
+
+- The [[file:scripts/wcwc][wcwc]] command provides a tool to assist both WCWC user and admin roles.  
+
+

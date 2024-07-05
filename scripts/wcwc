@@ -1,0 +1,322 @@
+#!/usr/bin/env python
+'''
+Manage and use elements of a Wire-Cell Workstation Cluster.
+
+It may take a configuration file given explicitly or defaulting to
+<prefix>/wcwc.cfg.  The file <prefix>/wcwc.cfg will be rewritten to reflect
+changes to the WCWC area under <prefix>/.
+'''
+
+default_repos = dict(
+    base=dict(url="https://github.com/spack/spack.git", tag="v0.22.1"),
+    wirecell=dict(url="https://github.com/WireCell/wire-cell-spack.git", tag="0.28.0.0", upstreams=["base"]),
+    nusoft=dict(url="https://github.com/NuSoftHEP/nusofthep-spack-recipes.git", upstreams=["base"]),
+    art=dict(url="https://github.com/FNALssi/fnal_art.git", upstreams=["nusoft"]),
+    larsoft=dict(url="https://github.com/LArSoft/larsoft-spack-recipes.git", upstreams=["art"]),
+    # dune, sbnd, ...
+)
+
+import os
+import click
+from pathlib import Path
+import yaml
+import subprocess
+import functools
+from collections import namedtuple
+
+def call(*cmd, **opts):
+    '''
+    Run and check command, return stdout.
+    '''
+    if isinstance(cmd[0], str):
+        opts["shell"]=True
+    return subprocess.check_output(*cmd, **opts).decode()
+
+def run(*cmd, **opts):
+    '''
+    Run a command.  Return successful return code.
+    '''
+    if isinstance(cmd[0], str):
+        opts["shell"]=True
+    got = subprocess.run(*cmd, **opts)
+    got.check_returncode()
+    return got
+
+def merge_dicts(dict1, dict2):
+    """ Recursively merges dict2 into dict1 """
+    if not isinstance(dict1, dict) or not isinstance(dict2, dict):
+        return dict2
+    for k in dict2:
+        if k in dict1:
+            dict1[k] = merge_dicts(dict1[k], dict2[k])
+        else:
+            dict1[k] = dict2[k]
+    return dict1
+
+class Config:
+    def __init__(self, prefix, config):
+        self.prefix = Path(prefix or "/wcwc")
+        self.cfg_path = Path(config or self.prefix / "wcwc.yml")
+        self.cfg = dict(repos=default_repos)
+        if self.cfg_path.exists():
+            self.cfg = merge_dicts(self.cfg, yaml.safe_load(self.cfg_path.read_text()))
+
+    def save(self):
+        self.cfg_path.parent.mkdir(parents=True, exist_ok=True)
+        self.cfg_path.write_text(yaml.dump(self.cfg))
+
+    def repo(self, name, record=False, **kwds):
+        '''
+        Return a (git) repo dict with name, possibly overriding with kwds
+        '''
+        got = dict(self.cfg['repos'].get(name, {}))
+        for key in "tag url upstreams".split():
+            val = kwds.get(key, None)
+            if val is None:
+                continue
+            got[key] = val
+        if record:
+            self.cfg['repos'][name] = got
+        return got
+        
+    def assure_yaml(self, path, dat, force=False):
+        path = Path(path)
+        if path.exists() and not force:
+            return
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(yaml.dump(dat))
+
+    def paths(self, name):
+        '''
+        Return all canonical paths for repo.
+        '''
+        root = self.prefix / "spack" / name
+        more = {k:root/k for k in "scope repo install".split()}
+        if name == "base":
+            # Connect with Spack's structure that differs from how WCWC handles others
+            more['repo'] = more['repo'] / "var" / "spack" / "repos" / "builtin"
+        return namedtuple("Paths", "root scope repo install")(root=root, **more)
+
+
+    def assure_repo(self, name, recurs=False, force=False):
+        '''
+        Assure a repo is configured.
+        '''
+        self.assure_repo_clone(name, recurs)
+        self.assure_repo_scope(name, recurs, force)
+
+    def assure_repo_scope(self, name, recurs=False, force=False):
+        '''
+        Assure that a repo scope is configured.
+        '''
+        repo = self.cfg['repos'][name]
+
+        if recurs and repo.get("upstreams", ()):
+            for usr in repo['upstreams']:
+                self.assure_repo_scope(usr, True)
+
+        paths = self.paths(name)
+
+        def cfg_file(fname, dat):
+            self.assure_yaml(paths.scope / fname, dat, force)
+
+        config_dat = dict(config=dict(build_stage=['$user_cache_path/stage'],
+                                      install_tree=dict(root=str(paths.install))))
+        
+        if name == "base":
+            # Hack: make sure bare spack repo is configured like base.
+            if paths.repo.exists():
+                # git would get angry if we run this before assure_repo_clone....
+                self.assure_yaml(paths.repo / "etc" / "spack" / "config.yaml", config_dat)
+
+        cfg_file("config.yaml", config_dat)
+                 
+        cfg_file("repos.yaml", dict(repos=[str(paths.repo)]))
+
+        if not repo.get("upstreams", None):
+            return
+        
+        upstreams = dict()
+        for usr in repo['upstreams']:
+            upstreams[usr] = dict(install_tree = str(self.paths(usr).install))
+        cfg_file("repos.yaml", dict(upstreams=upstreams))
+
+
+    def assure_repo_clone(self, name, recurs=True):
+        '''
+        Assure that repo of given name is cloned and at the right tag.
+
+        A tag corresponds to a branch wcwc-<tag>
+        '''
+        repo = self.cfg['repos'][name]
+
+        if recurs and repo.get("upstreams", ()):
+            for usr in repo['upstreams']:
+                self.assure_repo_clone(usr, True)
+
+        paths = self.paths(name)
+
+        def git(cli, *args, quiet=False, **kwds):
+            kwds['cwd'] = paths.repo
+            func = call if quiet else run
+            cli = 'git ' + cli
+            return func(cli, *args, **kwds)
+
+        if not paths.repo.exists():
+            url = repo['url']
+            if not url:
+                raise KeyError(f'no url for {name}')
+            run(f"git clone {url} {paths.repo}")
+        else:
+            git("fetch")
+
+        tag = repo.get("tag", None)
+        if tag is None:
+            return
+
+        want_branch = f'wcwc-{tag}'
+        have_branch = git("rev-parse --abbrev-ref HEAD", quiet=True)
+        if have_branch == want_branch:
+            return
+
+        try:
+            git(f'show-ref --verify --quiet refs/heads/{want_branch}', quiet=True)  # call to see if fails
+        except:
+            git(f'checkout -b {want_branch} {tag}')
+        else:
+            git(f'checkout {want_branch}')
+
+
+cmddef = dict(context_settings = dict(auto_envvar_prefix='WCWC',
+                                      help_option_names=['-h', '--help']))
+@click.option("-c", "--config", default=None, type=str,
+              help="Specify a config file")
+@click.option("-p", "--prefix", default=None, type=str,
+              help="Specify WCWC Spack installation prefix (def=/wcwc)")
+@click.group("wcwc", **cmddef)
+@click.pass_context
+def cli(ctx, config, prefix):
+    ctx.obj = Config(prefix, config)
+
+@cli.command("junk")
+@click.option("-p", "--prefix", default=None, type=str)
+@click.pass_context
+def junk(ctx, prefix):
+    '''
+    Ignore this cmd, it is to test out click stuff.
+    '''
+    print(f'junk: {prefix=}')
+    print(ctx.obj.cfg)
+
+
+
+wcwc_os_codenames=("Debian GNU/Linux 12 (bookworm)", "Debian GNU/Linux trixie/sid")
+
+@cli.command("check-os")
+def check_os():
+    """Check if current running OS is supported"""
+    got = call("lsb_release -ds").strip()
+    if got in wcwc_os_codenames:
+        return
+    raise ValueError(f'not a supported OS: {got}')
+
+@cli.command("list-oses")
+def list_oses():
+    '''
+    Print names of supported operating systems, one per line.
+    '''
+    for one in wcwc_os_codenames:
+        print(one)
+
+
+@cli.command("prepare-os")
+def prepare_os():
+    """Install OS packages"""
+    check_os
+    print("Updating OS package list (may ask for sudo password)")
+    run("sudo apt-get update")
+    print("Installing OS packages needed for WCWC")
+    cmd = """sudo apt-get install nfs-common rsync direnv 
+    build-essential ca-certificates coreutils curl environment-modules
+    gfortran git gpg lsb-release python3 python3-distutils python3-venv unzip zip
+    openssh-server openssh-client""".split()
+    run(cmd)
+
+
+@cli.command("spack", context_settings=dict(ignore_unknown_options=True,
+                                            help_option_names=[]))
+@click.option("--scope", default=os.environ.get('SPACK_USER_CONFIG_PATH', "base"),
+              help="Set the spack scope by name, translates to -C/--config-scope directory")
+@click.argument("args", nargs=-1, type=click.UNPROCESSED)
+@click.pass_context
+def spack(ctx, scope, args):
+    '''
+    Wrapper around calling spack.
+    '''
+    exe = ctx.obj.paths("base").root / "repo" / "bin" / "spack"
+    if not exe.exists():
+        print(f'no spack found at {exe}')
+        print('have you run "wcwc install-spack" yet?\n')
+        raise click.BadArgumentUsage("no spack found")
+
+    args = list(args)
+    if not ("-C" in args or "--config-scope" in args):
+        scope = str(ctx.obj.paths(scope).scope)
+        args = ["-C", scope] + args
+
+    subprocess.run([str(exe)] + args)
+        
+
+@cli.command("list-scopes")
+@click.pass_context
+def list_scopes(ctx):
+    '''List known scopes'''
+    for name, dat in ctx.obj.cfg['repos'].items():
+        paths = ctx.obj.paths(name)
+        url=dat.get('url','')
+        tag=dat.get('tag','')
+        us=','.join(dat.get('upstreams',[]))
+        exist = "installed" if paths.scope.exists() else "missing"
+        print(f'{name:12} {paths.scope} ({exist}) {tag}')
+
+def use_repo(record = True):
+    '''The command deals with a remote git repo'''
+    def decorator(func):
+        @click.option("-t","--tag",default=None, type=str, 
+                      help=f"override default git tag")
+        @click.option("-u","--url",default=None, type=str,
+                      help=f"override default git url")
+        @click.option("-U","--upstreams",default=None, type=str,
+                      help=f"override upstreams (comma separated list)")
+        @click.option("-n","--name",default="base", type=str,
+                      help=f"give name of repo (default=base)")
+        @click.pass_context
+        @functools.wraps(func)
+        def wrapper(ctx, tag, url, upstreams, name, *args, **kwds):
+            ctx.obj.repo(name, record=record, tag=tag, url=url, upstreams=upstreams)
+            kwds['name'] = name
+            return func(*args, **kwds)
+        return wrapper
+    return decorator
+
+@cli.command("install-repo")
+@click.option("-r", "--recurs", is_flag=True, default=False,
+              help="recurs over upstreams, if any (default=False)")
+@click.option("-f","--force", is_flag=True, default=False,
+              help="force overwriting (default=False)")
+@use_repo()
+@click.pass_context
+def install_repo(ctx, recurs, force, name):
+    '''
+    Install the named repo.
+
+    If recurs is True, upstreams with their default configuration will be installed.
+
+    If the repo name is not known and is new then at least URL is required.
+    '''
+    ctx.obj.assure_repo(name, recurs, force)
+    ctx.obj.save()
+    
+
+if '__main__' == __name__:
+    cli()

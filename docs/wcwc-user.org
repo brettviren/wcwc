@@ -1,0 +1,234 @@
+#+title: The Wire-Cell Workstation Cluster for Users
+#+setupfile: ~/org/setup.org
+#+setupfile: ~/org/setup-topic.org
+#+setupfile: ~/org/setup-darksun.org
+#+options: toc:t
+
+* meta :noexport:
+
+#+begin_src elisp :results none
+(setenv "PATH" (concat (getenv "PATH") ":" (expand-file-name "../scripts")))
+#+end_src
+
+
+* Introduction
+:PROPERTIES:
+:CUSTOM_ID: intro
+:END:
+
+This document describes how you can use the Wire-Cell workstation cluster (WCWC).  We describe how to incorporate your workstation into a WCWC and then how to benefit from WCWC membership.  In order to remain brief we provide a single, /opinionated/ way to use WCWC while a creative user should know that WCWC supports other usage patterns.  We also describe WCWC with references to its implementation on the BNL campus network.  Other institutions may replicate WCWC on their LAN.
+
+Many of the workflows described here are provided by the ~wcwc~ command may be downloaded from https://github.com/wirecell/wcwc and placed in your ~$PATH~.  Run ~wcwc~ with no arguments to get usage information.  That repository also provides this document and collects other files related to WCWC.
+
+#+begin_note
+You will find related but not essential additional information in notes such as this one.
+#+end_note
+
+
+* User workstation configuration
+:PROPERTIES:
+:CUSTOM_ID: user-config
+:END:
+
+In this section we describe the tasks required for your workstation to gain membership to WCWC.
+
+** Operating system 
+:PROPERTIES:
+:CUSTOM_ID: user-os
+:END:
+
+A WCWC user workstation must run a supported OS.  The supported OSes may be listed with:
+
+#+begin_src shell :results list :exports both
+wcwc oslist
+#+end_src
+
+#+RESULTS:
+- Debian
+  GNU/Linux
+  12
+  (bookworm)
+- Debian
+  GNU/Linux
+  trixie/sid
+
+Or to check if your workstation runs a supported OS
+
+#+begin_src shell :results none :exports code :noeval
+wcwc oscheck
+#+end_src
+This command is silent unless the OS fails.
+Once you have installed a supported OS you must assure vairous OS-level packages are installed with:
+
+#+begin_src shell :results none :exports code :noeval
+wcwc osinst
+#+end_src
+This may prompt you for your ~sudo~ password in order to run ~apt~.
+
+** Spack software
+:PROPERTIES:
+:CUSTOM_ID: spack-soft
+:END:
+
+The non-OS software for WCWC usage is provided by a Spack instance provided by your WCWC admin.  When WCWC workstation and server are on the same LAN the best way to access the Spack instance is via NFS.  In this case, you should add this line to your ~/etc/fstab~ file:
+
+#+begin_example
+lycastus.phy.bnl.gov:/wcwc /wcwc nfs4 _netdev,auto  0  0
+#+end_example
+Perform this further, one time action:
+#+begin_example
+mkdir /wcwc
+mount /wcwc
+#+end_example
+In the future ~/wcwc~ should be mounted automatically at boot.
+
+#+begin_note
+Your workstation may effectively become a WCWC member even if it does not reside at BNL or on another LAN that provides a WCWC server by copying or otherwise syncing the ~/wcwc~ directory from a full WCWC member workstation.
+#+end_note
+
+
+* Software usage
+:PROPERTIES:
+:CUSTOM_ID: user-software
+:END:
+
+You may simply use WCWC software in one or more ways as supported by Spack.  Without repeating the good Spack documentation, here we briefly outline some ways to do this.
+
+** Spack environment
+:PROPERTIES:
+:CUSTOM_ID: spack-env
+:END:
+
+Spack provides several ways to use the software it provides.  Most involve initial configuration of your shell environment.  Spack supports several popular shells.  To see what are supported:
+#+begin_src shell :results list :exports both
+ls /wcwc/spack/local/share/spack/setup-env.*
+#+end_src
+
+#+RESULTS:
+- /wcwc/spack/local/share/spack/setup-env.csh
+- /wcwc/spack/local/share/spack/setup-env.fish
+- /wcwc/spack/local/share/spack/setup-env.ps1
+- /wcwc/spack/local/share/spack/setup-env.sh
+
+Source the one that matches your shell:
+
+#+begin_src shell :results output :exports both :wrap example
+source /wcwc/spack/local/share/spack/setup-env.sh
+type spack
+#+end_src
+
+#+RESULTS:
+#+begin_example
+spack is a function
+spack () 
+{ 
+    : this is a shell function from: /wcwc/spack/local/share/spack/setup-env.sh;
+    : the real spack script is here: /wcwc/spack/local/bin/spack;
+    _spack_shell_wrapper "$@";
+    return $?
+}
+#+end_example
+
+#+begin_note
+Spack's "setup" script defines a /shell function/ named ~spack~ in addition to placing the ~spack~ program in your ~$PATH~.  Both are effectively identical but the shell function form is able to further modify your shell environment.  After "sourcing" the setup script, the function is used when calling ~spack~.  alternatively, you may wish to start a /subshell/ to contain Spack environment changes: ~bash --rcfile /wcwc/spack/local/share/spack/setup-env.sh~
+#+end_note
+
+
+** Spack Environment Modules
+:PROPERTIES:
+:CUSTOM_ID: spack-sem
+:END:
+
+We may rely on Spack's support for [[https://modules.readthedocs.io/][Environment Modules]] as one simple way to use Spack software in a piecemeal manner.
+
+#+begin_example
+$ spack load root
+$ root --version
+ROOT Version: 6.30/06
+Built for linuxx8664gcc on Jun 04 2024, 20:14:19
+From heads/master@tags/v6-30-06
+$ spack unload root
+#+end_example
+When Spack provides more than one instance of a particular package you must uniquely qualify which to load by providing a more detailed Spack *spec* instead of just a simple package name.  
+
+#+begin_note
+To discover all installed instances of a package and their qualifiers use, for example the command ~spack find root~.  See the Spack [[https://spack.readthedocs.io/en/latest/basic_usage.html#sec-specs][Basic Usage manual]] and Spack "spec" [[https://spack.readthedocs.io/en/latest/spack.html#module-spack.parser][reference docs]] for more info on how to provide a Spack *spec*.
+#+end_note
+
+** Spack Environments
+:PROPERTIES:
+:CUSTOM_ID: spack-envs
+:END:
+
+Spack Environments provide a persistent and more sophisticated way to specify your shell environment configuration than do the similarly named Spack Environment Modules.  They come in two types with different policy: personal and shared.
+
+*** Personal environments
+:PROPERTIES:
+:CUSTOM_ID: personal-envs
+:END:
+
+You may create your own Spack Environments and you may use shared Spack Environments provided by your WCWC admin.
+
+Here we will construct and activate a new Spack Environment that is *personal* (not shared).
+#+begin_example
+$ spack env activate --create --dir my-env
+$ echo $SPACK_ENV
+/home/bv/my-env
+#+end_example
+
+#+begin_note
+The ~--dir~ indicates the directory to hold the environment bookkeeping files and it tells Spack that this is a personal environment.  
+#+end_note
+
+Once an environment is activated it /narrows/ many Spack commands.  In particular, no packages are available until we "add" them:
+#+begin_example
+$ spack install --add root
+$ which root
+/home/bv/my-env/.spack-env/view/bin/root
+#+end_example
+
+#+begin_note
+You may only "add" package instances to a personal environment that are already built in the Spack area.  As that area is read-only you may not "install" novel ones.  Contact your WCWC admin to "install" any novel package instances that you may need.  You may also learn about [[https://spack.readthedocs.io/en/latest/chain.html][chaining Spack installations]] to augment the central Spack area with your own. 
+#+end_note
+Later, in a fresh shell, we may reactivate the environment by giving the environment directory that was created
+
+#+begin_example
+$ spack env activate my-env
+$ which root
+/home/bv/my-env/.spack-env/view/bin/root
+#+end_example
+
+#+begin_note
+We will later exploit this to provide an environment for developing software.
+#+end_note
+
+*** Shared environments
+:PROPERTIES:
+:CUSTOM_ID: shared-envs
+:END:
+
+The WCWC admin may define named environments that reside in the central Spack installation area and which may shared by many users.  You may list the names of the available shared environments:
+#+begin_example
+$ spack env list
+==> 1 environments
+    wct_0-28-0_glpk-hdf-root
+#+end_example
+You may activate a shared environment similar to a personal environment by giving its name instead of a directory:
+#+begin_example
+$ spack env activate wct_0-28-0_glpk-hdf-root
+$ echo $SPACK_ENV
+/wcwc/spack/local/var/spack/environments/wct_0-28-0_glpk-hdf-root
+$ which root
+/wcwc/spack/local/var/spack/environments/wct_0-28-0_glpk-hdf-root/.spack-env/view/bin/root
+#+end_example
+
+#+begin_note
+Shared environments can be useful for end users but their *view* directory is not writable.  A user can not modify shared environments.
+#+end_note
+
+* Software development environments
+:PROPERTIES:
+:CUSTOM_ID: sw-dev-envs
+:END:
+
+A Spack Environment can be used to provide a basis for software development as its *view* directory, ie  ~$SPACK_ENV/.spack-env/view~, acts similarly to the traditional Unix ~/usr~ or ~/usr/local~ prefix.  To build a software package under development you may provide this prefix or in many cases rely on packages to be found via ~PKG_CONFIG_PATH~ and ~CMAKE_PREFIX_PATH~ that are set by the Spack Environment activation. 

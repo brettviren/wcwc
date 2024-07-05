@@ -1,0 +1,918 @@
+#+title: WCWC - The Wire-Cell Workstation Cluster
+#+setupfile: ~/org/setup.org
+#+setupfile: ~/org/setup-topic.org
+#+setupfile: ~/org/setup-darksun.org
+#+options: toc:t
+
+* meta :noexport:
+
+#+begin_src elisp :results none
+(setenv "PATH" (concat (getenv "PATH") ":" (expand-file-name "../scripts")))
+#+end_src
+
+
+* Introduction
+:PROPERTIES:
+:CUSTOM_ID: intro
+:END:
+
+The Wire-Cell team has developed a system to cluster computers for the purpose of sharing hardware, software and human resources with a focus on Wire-Cell related development.  It is given the name Wire-Cell Workstation Cluster (WCWC) as it is composed primarily of team members' workstations.
+
+This document describes the WCWC in some detail.  It assumes the audience is the author/developer of WCWC (in the future when memory fades), others that wish to implement WCWC on their computers or just anyone interested in all the details.  Users who simply want to know the basics of how they can join and take advantage of WCWC may wish to focus on the [[file:wcwc-user.org]] document and come back to this document if they wish to learn more.  Many of the specific details are coded into the ~wcwc~ program that is available from https://github.com/wirecell/wcwc.  Many of the examples below will utilize this program.
+
+* Basics
+:PROPERTIES:
+:CUSTOM_ID: basics
+:END:
+
+To get started, a workstation owner should follow these steps:
+
+1. Install Debian stable (currently 12 aka "bookworm") on your workstation.
+2. Run the following as root (see section [[NFS Client]] for more info):
+   #+begin_example
+   apt install nfs-common
+   mkdir /wcwc
+   mount -t nfs lycastus.phy.bnl.gov:/ro/wcwc /wcwc
+   #+end_example
+3. As a normal user, and assuming bash shell:
+   #+begin_example
+   source /wcwc/spack/local/share/spack/setup-env.sh
+
+   spack find
+   spack load <spec>
+
+   # or
+
+   spack env list
+   spack env activate <name>
+   #+end_example
+4. Optional, give the WCWC admin(s) SSH access to the ~root~ user of your workstation.
+   #+begin_example
+   sudo mkdir -p /root/.ssh   # if needed
+   sudo chmod 700 /root/.ssh  # if needed
+   curl http://lycastus.phy.bnl.gov/~wcwc/wcwc.pub | sudo tee -a /root/.ssh/authorized_keys
+   #+end_example
+   This URL is internal to the BNL wired campus network.  
+See the [[file:wcwc-user.org]] document for more details.
+
+
+* Users
+:PROPERTIES:
+:CUSTOM_ID: users
+:END:
+
+This section provides information that a WCWC user should learn in order to make good use of a WCWC computer account.  It requires the WCWC computer admin to provide the ~/wcwc~ directory (see sections [[#nfs-client]], [[#copy-client]] and [[#spack-admin]]).  The software is provided and managed with [[https://spack.readthedocs.io][Spack]] and so end-user use of the software requires some understanding of Spack.  Section [[#spack-intro]] gives an introduction to Spack from a user point of view.  Section [[#tasks]] gives recipes to perform tasks with Spack that might be expected from a WCWC user.
+
+** Spack introduction
+:PROPERTIES:
+:CUSTOM_ID: spack-intro
+:END:
+
+This section describes Spack basics that should be understood by a WCWC user.
+
+*** Spack commands
+:PROPERTIES:
+:CUSTOM_ID: spack-commands
+:END:
+
+All spack operations are performed with the ~spack~ program.  With no special setup, ~spack~ may be run directly from its installation location under ~/wcwc~.  For example, all installed package instances can be listed with:
+
+#+begin_example
+/wcwc/spack/local/bin/spack find
+#+end_example
+
+
+*** Spack shell environment
+:PROPERTIES:
+:CUSTOM_ID: spack-shell
+:END:
+
+Some Spack operations are designed to modify your working shell environment and they require that the ~spack~ command be defined as a shell function also named ~spack~.  To define the ~spack~ shell function you may source a script of the flavor matching your shell.
+
+#+begin_example
+fish$ source /wcwc/spack/local/share/spack/setup-env.fish
+bash$ source /wcwc/spack/local/share/spack/setup-env.sh
+#+end_example
+You are strongly suggested to only type this when needed and *do not* add it to your normal shell setup (~.bashrc~ etc).
+Alternatively, to avoid mutating your existing shell you may wish to start a new subshell for spack use.
+#+begin_example
+$ fish --init-command="source /wcwc/spack/local/share/spack/setup-env.fish"
+$ bash --rcfile /wcwc/spack/local/share/spack/setup-env.sh 
+#+end_example
+
+#+begin_note
+The first run of any of these commands may take many seconds to complete as Spack creates some files in the user's =~/.spack/= area.
+#+end_note
+
+#+begin_note
+From here on out we will simply write ~spack~ in the examples with the understanding that it must be a shell function if the operation changes the shell environment.
+#+end_note
+
+*** Specifying Spack packages
+:PROPERTIES:
+:CUSTOM_ID: spack-spec
+:END:
+
+In Spack, a "package" is described by its *spec* (specification).  A Spack spec is expressed in a simple language that allows describing a package on a spectrum from abstract to concrete.  It is important that a WCWC user have a basic understanding of how a spec may be written.
+
+Most simply, we may find all installed packages that match a *spec* that consists only of a package *name*.  Here we find all installed instances of the package ~go-jsonnet~:
+
+#+begin_example
+$ spack find go-jsonnet
+-- linux-debian12-haswell / gcc@12.2.0 --------------------------
+go-jsonnet@0.19.1
+==> 1 installed package
+#+end_example
+There happens to be exactly one such package instance that matches.  In this special case, we may refer to that instance in Spack commands that require a unique *spec* simply by again giving the package name (~go-jsonnet~).
+
+However, it is common to have multiple installations of the same package.  
+
+#+begin_example
+$ spack find wire-cell-toolkit
+-- linux-debian12-haswell / gcc@12.2.0 --------------------------
+wire-cell-toolkit@0.28.0  wire-cell-toolkit@0.28.0  wire-cell-toolkit@0.28.0
+==> 3 installed packages
+#+end_example
+As seen, not only are there three installations but they are all of the same version.
+To distinguish between them, we must learn their "qualifiers":
+
+#+begin_note
+The term "qualifiers" used here is not from the Spack lexicon but is borrowed from the legacy UPS packaging system.
+#+end_note
+
+#+begin_example
+$ spack find -lv wire-cell-toolkit
+-- linux-debian12-haswell / gcc@12.2.0 --------------------------
+zfj74rs wire-cell-toolkit@0.28.0~cppjsonnet~glpk~hdf~root+tbb build_system=generic cxxstd=17
+ujpvgpd wire-cell-toolkit@0.28.0~cppjsonnet~glpk~hdf+root+tbb build_system=generic cxxstd=17
+cbwhesd wire-cell-toolkit@0.28.0~cppjsonnet+glpk+hdf+root+tbb build_system=generic cxxstd=17
+==> 3 installed packages
+#+end_example
+Each row shows the (abbreviated) Spack package *hash* followed by the (non-hash parts) of the Spack *package spec*.  The latter part represents how the package was configured.  The hash part represents this configuration as well as the specs of all dependencies.
+
+In general, a *spec* is written in a syntax that begins with the package name and then has a number of fields as summarized.
+
+#+begin_example
+<spec> = <name> @<version> %<compiler> +<variant> ~<nonvariant> /<hash> \
+         <name>=<value> ^<spec>
+#+end_example
+
+- ~<name>~ :: the name of the Spack packaging.
+- ~@<version>~ :: a version or version range.
+- ~%<compiler>~ :: the compiler which itself may include an ~@<version>~ qualifyer
+- ~+<variant>~ :: build option that is enabled.
+- =~<variant>= :: a build option that is disabled.
+- ~<name>=<value>~ :: activate variant with a value.
+- ~<name>==<value>~ :: activate variant with a value and propagate through the dependencies.
+- ~/<hash>~ :: package instance hash, may be abreviated.
+- ~^<spec>~ :: the spec of a dependency.
+See the [[https://spack.readthedocs.io/en/latest/basic_usage.html#sec-specs][Basic Usage manual]] for more info on the spec syntax and [[https://spack.readthedocs.io/en/latest/spack.html#module-spack.parser][reference docs]] for the formal grammar.
+
+#+begin_note
+The elements of the a spec can be concatenated with or without white space.  It is best to quote a spec when providing it as part of a shell command line to prevent any potential interpretation by the shell.
+#+end_note
+
+For some commands, a spec must be prescriptive enough to uniquely identify a Spack package instance in the set of available packages.  The ~find~ command can be used to test if a spec is unique.
+
+#+begin_example
+$ spack find -lv wire-cell-toolkit+hdf+root
+-- linux-debian12-haswell / gcc@12.2.0 --------------------------
+cbwhesd wire-cell-toolkit@0.28.0~cppjsonnet+glpk+hdf+root+tbb build_system=generic cxxstd=17
+==> 1 installed package
+#+end_example
+Given an incomplete spec that is at least unambiguous enough to find a single, unique package, we may dump its fully-qualified (aka "concretized") spec:
+
+#+begin_example
+$ spack spec wire-cell-toolkit+hdf+root
+(... very big dump ...)
+#+end_example
+
+On rare occasions, we will need to include portions of the dependency tree in a spec.  This is done by appending one or more specs each prefixed with a carrot (~^~).  For example, to investigate how the API change of fmtlib broke WCT we needed to specify versions of fmtlib and spdlog.  One can visualize how the dependency tree changes by comparing the output of
+
+#+begin_example
+spack spec wire-cell-toolkit ^spdlog@1.13.0 ^fmt@10.2.1
+spack spec wire-cell-toolkit ^spdlog@1.9.2 ^fmt@8.1.1
+#+end_example
+
+** Typical tasks
+:PROPERTIES:
+:CUSTOM_ID: tasks
+:END:
+
+A new WCWC user should read section [[#spack-intro]] first.  This section gives a menu for how to perform various tasks using WCWC Spack installation.
+
+*** Using a package
+:PROPERTIES:
+:CUSTOM_ID: spack-sem
+:END:
+
+Spack supports [[https://modules.readthedocs.io/][Environment Modules]] to set up the user shell environment to use installed packages.
+
+#+begin_note
+The user must set up the Spack shell environment as described in section [[Spack shell environment]].
+#+end_note
+
+#+begin_example
+$ spack load go-jsonnet
+$ which jsonnet
+/wcwc/spack/local/opt/spack/linux-debian12-haswell/gcc-12.2.0/\
+  go-jsonnet-0.19.1-xwfsfur3rabimpsonz4jxp7c5bglp5e2/bin/jsonnet
+$ jsonnet --version
+Jsonnet commandline interpreter (Go implementation) v0.19.1
+
+$ echo $PATH | tr ' ' '\n' | grep -c '/wcwc/spack'
+25
+#+end_example
+Environment Modules will make large changes to your shell environment.  See section [[#spack-env]] for a quieter alternative.
+The modifications to the user's shell performed by the Environment Module ~load~ command can be undone: 
+
+#+begin_example
+$ spack unload go-jsonnet
+$ which jsonnet
+/usr/bin/jsonnet
+$ jsonnet --version
+Jsonnet commandline interpreter v0.18.0
+#+end_example
+#+begin_note
+This example assumes an OS-provided ~jsonnet~ is installed.  Your WCWC system may lack this in which case no ~jsonnet~ command will be found after the ~go-jsonnet~ Environment Module has been unloaded.
+#+end_note
+
+*** Spack Environments
+:PROPERTIES:
+:CUSTOM_ID: spack-env
+:END:
+
+Spack provides a feature called "Spack Environments" and they are distinct from "Environment Modules" (section [[#spack-sem]]).
+A Spack Environment is similar to a Python "virtualenv" in that it provides a special directory or "view" 
+(see section [[#spack-view]]) that collects all files provided by software installations into one directory with the  ~bin/~,  ~lib/~, ~include/~ and other sub-directories such as conventionally found under Unix ~/usr/~ or ~/usr/local/~ areas.
+
+**** Managed environments
+:PROPERTIES:
+:CUSTOM_ID: spack-managed-env
+:END:
+
+A Spack Environment may be "managed" which means it is installed by the Spack admin and made available to be shared by all users.  Spack is able to track managed Spack Environments to assure underlying packages are retained.
+
+A user may find what managed environments are available:
+#+begin_example
+$ spack env list
+==> 2 environments
+    wct_0-28-0  wct_0-28-0_glpk-hdf-root
+#+end_example
+And from that list activate one:
+
+#+begin_example
+$ spack env activate wct_0-28-0
+
+$ echo $PATH|tr ' ' '\n' | grep '/wcwc/spack'
+/wcwc/spack/local/var/spack/environments/wct_0-28-0/.spack-env/view/bin
+
+$ spack env deactivate
+#+end_example
+Unlike Environment Modules, a Spack Environment needs to add only a single entry to ~PATH~-like variables as the Spack "view" is doing the aggregation.  This view can also be exploited when developing.  See section [[Developing WCT]].
+
+**** Anonymous environments
+:PROPERTIES:
+:CUSTOM_ID: spack-anonymous-env
+:END:
+
+A Spack Environment may be "anonymous" and created by and for the end user.
+The user is thus free to determine the name and contents of their anonymous environments.
+
+#+begin_note
+Anonymous environments are not known to the Spack admin and thus may have their underlying packages removed if the Spack installation area is purged. 
+#+end_note
+
+The user may determine name and contents by manually creating and editing an environment:
+#+begin_example
+$ spack env create --dir ~/spack-envs/wct-dev
+==> Created independent environment in: /home/bviren/spack-envs/wct-dev
+==> Activate with: spack env activate /home/bviren/spack-envs/wct-dev
+
+$ emacs ~/spack-envs/wct-dev/spack.yaml
+#+end_example
+Primarily, ~spack.yaml~ should be edited in order to add one or more specs to its ~specs~ list.  For example:
+
+#+begin_example
+specs:
+  - wire-cell-toolkit@0.28.0+hdf+root
+#+end_example
+
+Alternatively, the user may create and activate the environment and use Spack commands to modify it.
+
+#+begin_example
+$ spack env activate --create ~/spack-envs/wct-dev
+# or later
+$ spack env activate ~/spack-envs/wct-dev
+
+$ spack add wire-cell-toolkit+hdf+root
+#+end_example
+
+After modifying the environment's configuration, its "view" must be updated to reflect the changes:
+
+#+begin_example
+$ spack concretize
+$ which wire-cell
+/home/bviren/spack-envs/wct-dev/.spack-env/view/bin/wire-cell
+$ wire-cell --help
+(...)
+#+end_example
+
+**** Common environment operations 
+:PROPERTIES:
+:CUSTOM_ID: spack-common-env
+:END:
+
+
+When activating a Spack Environment the ~SPACK_ENV~ shell environment variable will be set to a directory that represents the environment.  See section [[#spack-dev]] for one way this variable may be useful.
+
+To deactivate an active environment
+#+begin_example
+$ spack env deactivate
+#+end_example
+
+
+*** Spack views
+:PROPERTIES:
+:CUSTOM_ID: spack-view
+:END:
+
+The "view" that provides the heart of a Spack Environment (see section [[#spack-env]]) can be created directly by the user and without any Spack shell environment.  It is constructed with one or more specs, for example:
+
+#+begin_example
+$ spack view add -i wctdev wire-cell-toolkit
+#+end_example
+
+One may leverage a view and [[https://direnv.net/][direnv]] to produce a clean, well controlled directory-based shell environment management system.  
+
+#+begin_example
+$ mkdir my-work
+$ echo 'load_prefix /path/to/wctdev' > my-work/.envrc
+$ cd my-work/
+$ direnv allow
+$ wire-cell --help
+#+end_example
+In the future, simply ~cd my-work/~ to restore proper environment and continue development.
+
+
+*** Developing WCT
+:PROPERTIES:
+:CUSTOM_ID: spack-dev
+:END:
+
+Spack can be leveraged in a number of ways to develop Wire-Cell toolkit, or other software packages.  Here, we give an opinionated method based on Spack views and ~direnv~.  It requires no special Spack environment setup and puts all control over the developer environment in the ~.envrc~ file which supports most popular shells with a single syntax.
+
+#+begin_example
+$ /wcwc/spack/repos/wct-spack/scripts/wct-make-dev \
+  --spack /wcwc/spack/local/bin/spack \
+  --spec wire-cell-toolkit@0.28.0+hdf+root \
+  --tag apply-pointcloud \
+  ~/dev/wct/apply-pointcloud
+#+end_example
+That will create the given directory, download all the source, create a ~direnv~ configuration file and print to the screen what you need to do for the initial build:
+
+#+begin_example
+cd /home/bviren/dev/wct/apply-pointcloud && direnv allow
+cd python && pip install -e . && cd -
+bash -c "$WIRECELL_CONFIG" && bash -c "$WIRECELL_BUILD"
+#+end_example
+In the future, to revisit the development environment, simply
+#+begin_example
+$ cd ~/dev/wct/apply-pointcloud
+#+end_example
+
+* Hosts
+:PROPERTIES:
+:CUSTOM_ID: hosts
+:END:
+
+
+The WCWC cluster is comprised of various computers (mostly workstations) each of which fulfills one or more WCWC host roles.  Each role is orthogonal and determines requirements, features, configuration, etc.  Some roles are mutually incompatible for a single host computer to fulfill.  This section summarizes what must be done to enable a computer to fulfill each role.
+
+** NFS Client
+:PROPERTIES:
+:CUSTOM_ID: nfs-client
+:END:
+
+The NFS Client role is for a host that wishes to mount the WCWC NFS volumes.  An NFS Client by default will mount read-only but if it is to also serve as a Spack Installer (see below) it must mount read/write.
+
+#+begin_example
+cat << EOF >> /etc/fstab
+lycastus.phy.bnl.gov:/wcwc /wcwc nfs4 _netdev,auto  0  0
+EOF
+
+mount /wcwc
+#+end_example
+The main reason for a host to take the NFS Client role is so that users may use the WCWC software.  See section [[Users]].
+
+
+** Copy Client
+:PROPERTIES:
+:CUSTOM_ID: copy-client
+:END:
+
+The role of *Copy Client* is similar to *NFS Client* except the ~/wcwc~ directory is populated by some synchronization mechanism that produces a copy.  It may be realized with a large variety of methods that present various options and restrictions.  Here, we outline one possible method that is intended to provide ~/wcwc~ to the WCWC user in a way that is symmetric with what is provided by NFS Client but which is feasible for hosts that can not NFS mount ~/wcwc~ due to NFS access controls or other restrictions.
+
+The method will use rsync over SSH to maintain an exact sync of ~/wcwc~ take from an upstream NFS Client or Copy Client.  Except for the act of synchronizing, the copy will be considered read-only and so not allow users on the Copy Client host to modify the contents.
+
+*** Copy client account
+:PROPERTIES:
+:CUSTOM_ID: copy-client-user
+:END:
+
+As ~root~ on the Copy Client host:
+#+begin_example
+useradd -c 'Wire-Cell Workstation Cluster User' -d /home/wcwc -m -s /bin/bash wcwc
+mkdir /wcwc
+chown wcwc:wcwc /wcwc
+#+end_example
+
+This special user is not strictly needed but is created to enforce the copy to be treated read-only.  See section [[#copy-client-mutable]] for an optional policy that allows mutating the copy.
+
+As user ~wcwc~
+#+begin_example
+mkdir .ssh
+chmod 700 .ssh
+cat << EOF >> ~/.ssh/config
+Host hierocles.bnl
+        ControlMaster auto
+        ControlPath ~/.ssh/socket-%r@%h:%p
+        ControlPersist 10m
+        ForwardAgent yes
+        ForwardX11 yes
+        HostKeyAlias hierocles
+        Hostname hierocles
+        PreferredAuthentications publickey
+        ProxyCommand ssh -A bviren@gateway.phy.bnl.gov -W %h:%p
+        ServerAliveInterval 60
+        User bviren
+EOF
+
+ssh hierocles.bnl
+#+end_example
+
+#+begin_note
+The example assumes a real BNL user (~bviren~) can SSH to a the ~wcwc~ account, forwarding an SSH key that allows access to a WCWC workstation (~hierocles~) via a BNL SSH gateway and that provides the ~/wcwc~ upstream mount.
+#+end_note
+
+*** Performing a sync
+:PROPERTIES:
+:CUSTOM_ID: copy-client-sync
+:END:
+
+#+begin_example
+$ rsync --del --archive hierocles.bnl:/wcwc/ /wcwc/
+#+end_example
+
+#+begin_note
+Including the trailing ~/~ in the source part is important.  The ~--del~ will cause the absence of any files in the source to be reflected in the destination.
+#+end_note
+
+*** Automating the sync
+
+Contact a WCWC admin for methods to securely automate this synchronization.
+
+*** Copy mutating 
+:PROPERTIES:
+:CUSTOM_ID: copy-client-mutable
+:END:
+
+Of course, the copy belongs to the copier.  Instead of enforcing a policy that treats the copy as a read-only and fully synchronized, the copier may apply another.  Some possible policies to consider:
+
+- ever growing :: remove the ~--del~ flag from the ~rsync~ command but do not otherwise modify the copy.  This will retain packages after any upstream pruning and can be useful to protect against invalidation of any local usage.
+- divergent :: same as *ever growing* but allow for local Spack commands to modify the contents.  This may be useful to benefit from builds done on the Install Server while allowing the local user to ~spack install~ additional package instances (see section [[#spack-install]]) or to create locally managed Spack Environments (see section [[#spack-env]]).
+
+In adopting a policy that allows the copy of ~/wcwc~ to not be kept in sync, the copier takes on full responsibility for its contents.
+
+
+** Spack Installer
+:PROPERTIES:
+:CUSTOM_ID: spack-install
+:END:
+
+The Spack Installer role is held by a host that will e used to install Spack packages.  Such a host MAY also be an (the) NFS Server.  As ~root~ user.
+
+#+begin_example
+apt install build-essential ca-certificates coreutils curl environment-modules \
+  gfortran git gpg lsb-release python3 python3-distutils python3-venv unzip zip
+
+useradd -c 'Wire-Cell Workstation Cluster User' -d /home/wcwc -m -s /bin/bash wcwc
+mkdir /wcwc
+#+end_example
+When the Spack Installer is also the NFS Server then it should access the ~/wcwc~ directory as a bind-mount:
+
+#+begin_example
+cat << EOF >> /etc/fstab
+/data1/wcwc /wcwc none bind,uid=1001
+EOF
+
+mount /wcwc
+#+end_example
+When the Spack Installer is an NFS Client then it should mount the ~/wcwc~ read/write as described above.
+For creating and maintaining the Spack installation itself see section [[#spack-admin]]
+
+
+** Remote Login
+:PROPERTIES:
+:CUSTOM_ID: remote-login
+:END:
+
+The Remote Login role is satisfied by any host computer that allows WC team members to login via SSH to a personal shell.
+
+#+begin_example
+apt install openssh-server
+#+end_example
+
+- TBD: account creation, credential management, static IP address, NFS home directories
+
+
+** Shared GPU
+:PROPERTIES:
+:CUSTOM_ID: shared-gpu
+:END:
+
+A computer that has at least one GPU device that is available for use by WC team members must fulfill the Remote User role and  agree to the GPU sharing policy: 
+
+- A user that wishes to use a GPU must coordinate that use with the GPU owner.
+
+  
+
+
+
+
+* Admin
+:PROPERTIES:
+:CUSTOM_ID: spack-admin
+:END:
+
+The WCWC admin role covers providing the WCWC software infrastructure.  In particular, the ~/wcwc~ directory is populated by Spack and served by NFS.
+
+** NFS Server
+:PROPERTIES:
+:CUSTOM_ID: nfs-server
+:END:
+
+One host, ~lycastus.phy.bnl.gov~, has a singular, central role to provide central NFS storage providing Spack (and one day perhaps other) files.
+
+#+begin_example
+apt install nfs-kernel-server 
+
+useradd -c 'Wire-Cell Workstation Cluster User' -d /home/wcwc -m -s /bin/bash wcwc
+mkdir -p /nfs/ro/wcwc
+
+cat << EOF >> /etc/fstab
+/data1/wcwc /nfs/ro/wcwc none bind,uid=1001
+EOF
+
+mount /nfs/wcwc
+
+cat << EOF >> /etc/exports
+/nfs		130.199.22.0/23(rw,sync,crossmnt,no_subtree_check,fsid=0)
+/nfs/ro/wcwc	130.199.22.0/23(ro,sync,no_subtree_check)
+EOF
+
+exportfs -a
+showmount -e
+#+end_example
+
+
+
+** Initialize Spack area
+:PROPERTIES:
+:CUSTOM_ID: spack-init
+:END:
+
+All WCWC software that is not provided by the OS is provided in a single directory tree.  By default this is ~/wcwc~.  The part managed by Spack is organized as ~/wcwc/spack/<name>/{repo,scope,install}~.  The ~<name>~ is one coarse-grained block of a software stack.  The ~base~ is Spack itself, depending on that is ~wirecell~.  A separate branch includes the dependency chain: ~nusoft, art, lartsoft~.  From there, per-experiment branches are expected.  The ~repo/~ sub-directory holds the Spack ~package.py~ files for building source (~base/repo/~ also holds all of Spack source).  The ~scope/~ directory holds Spack configuration files to narrow to a portion of the coarse dependency chain.  Finally, ~install/~ holds the built, installed packages.  See [[https://spack.readthedocs.io/en/latest/configuration.html#configuration-scopes][configuration scopes]], [[https://spack.readthedocs.io/en/latest/chain.html][chaining Spack installations]] and [[https://spack.readthedocs.io/en/latest/repositories.html][Spack repos]] for more info.
+
+The ~/wcwc~ area is managed with the ~wcwc~ command:
+
+#+begin_src shell :results verbatim :exports both
+wcwc
+#+end_src
+
+#+RESULTS:
+#+begin_example
+Usage: wcwc [OPTIONS] COMMAND [ARGS]...
+
+Options:
+  -p, --prefix TEXT  Specify WCWC Spack installation prefix (def=/wcwc)
+  -c, --config TEXT  Specify a config file
+  -h, --help         Show this message and exit.
+
+Commands:
+  check-os      Check if current running OS is supported
+  install-repo  Install the named repo.
+  junk          Ignore this cmd, it is to test out click stuff.
+  list-oses     Print names of supported operating systems, one per line.
+  list-scopes   List known scopes
+  prepare-os    Install OS packages
+  spack         Wrapper around calling spack.
+#+end_example
+
+To install the files for each known ~<name>~ this sub command is available:
+
+#+begin_src shell :results verbatim :exports both
+wcwc install-repo --help
+#+end_src
+
+#+RESULTS:
+#+begin_example
+Usage: wcwc install-repo [OPTIONS]
+
+  Install the named repo.
+
+  If recurs is True, upstreams with their default configuration will be
+  installed.
+
+  If the repo name is not known and is new then at least URL is required.
+
+Options:
+  -r, --recurs          recurs over upstreams, if any (default=False)
+  -f, --force           force overwriting (default=False)
+  -t, --tag TEXT        override default git tag
+  -u, --url TEXT        override default git url
+  -U, --upstreams TEXT  override upstreams (comma separated list)
+  -n, --name TEXT       give name of repo (default=base)
+  -h, --help            Show this message and exit.
+#+end_example
+
+When the defaults are acceptable, a recursive install is possible
+
+#+begin_example
+wcwc install-repo -r wire-cell
+#+end_example
+
+A configuration file will be written to ~/wcwc/wcwc.yaml~.  It may be modified and future ~wcwc~ commands will respect any changes.  A non-standard prefix and/or configuration file may also be used:
+
+#+begin_example
+wcwc -p /path/to/wcwc -c /other/path/to/wcwc.cfg install-repo -r wire-cell
+#+end_example
+
+With no ~<name>~ given, the base Spack will be installed.
+
+#+begin_example
+wcwc install-repo
+#+end_example
+
+Once the base Spack is installed, the ~spack~ command can be run in several ways:
+#+begin_example
+$ wcwc spack [...]
+
+$ /wcwc/spack/base/repo/bin/spack 
+
+$ source /wcwc/spack/base/repo/share/spack/setup-env.sh 
+$ spack [...]
+#+end_example
+Further examples of this command will simply use ~spack~ with the assumption any of the above methods are used.  A particular method will be noted if it is required for some particular case.
+
+Spack configuration can be narrowed to a scope in a few ways:
+#+begin_example
+$ wcwc spack --scope wirecell [....]
+
+$ wcwc spack -C /wcwc/spack/wirecell/scope [....]
+
+$ spack -C /wcwc/spack/wirecell/scope [....]
+
+$ SPACK_USER_CONFIG_PATH=/srv/bv/wcwc/spack/wirecell/scope \
+  spack [...] 
+#+end_example
+The ~wcwc spack~ variants will also honor ~SPACK_USER_CONFIG_PATH~.
+We will see other uses of "scope" after introducing Spack Environments.  
+
+The install can be tested to see if the ~/wcwc~ area is properly configured: 
+#+begin_example
+$ spack config get | grep -A 1 install_tree:
+#+end_example
+And insure you get back the expected install area.  And here is a simple package installation test:
+#+begin_example
+$ spack install zlib
+#+end_example
+
+
+** Installing packages
+:PROPERTIES:
+:CUSTOM_ID: spack-install
+:END:
+
+As user ~wcwc~ and after entering a Spack shell
+
+#+begin_example
+spack install wire-cell-toolkit
+spack install wire-cell-toolkit+hdf
+spack install wire-cell-toolkit+root
+spack install wire-cell-toolkit+root+hdf+glpk
+#+end_example
+
+
+** Providing environments
+:PROPERTIES:
+:CUSTOM_ID: spack-def-env
+:END:
+
+A Spack Environment (not to be confused with a Spack shell environment mutated via Spack's support for Environment Modules) is like a Python "virtualenv" aka "venv".  A Spack Environment may be "managed" meaning it is created by the admin and is available by name to all users.  To create a managed SE, first find available packages:
+
+#+begin_example
+spack find -lv wire-cell-toolkit
+zfj74rs wire-cell-toolkit@0.28.0~cppjsonnet~glpk~hdf~root+tbb build_system=generic cxxstd=17
+ujpvgpd wire-cell-toolkit@0.28.0~cppjsonnet~glpk~hdf+root+tbb build_system=generic cxxstd=17
+cbwhesd wire-cell-toolkit@0.28.0~cppjsonnet+glpk+hdf+root+tbb build_system=generic cxxstd=17
+#+end_example
+Then, create the initial Spack environment name.  For those based on WCT, the WCWC naming contention is:
+
+#+begin_example
+wct_<dashed-version>[_<dashed-variant-list>]
+#+end_example
+Where the recommended variants (~tbb~) are turned on but left implicit in the name.  
+So, for example:
+
+#+begin_example
+spack env create wct_0-28-0
+spack env create wct_0-28-0_glpk-hdf-root
+#+end_example
+Each command will create and print the directory housing configuration for each Spack Environment.  One must then edit the ~config.yaml~ and at least add the WCT spec to the ~specs~ list.
+
+#+begin_example
+# for wct_0-28-0
+specs:
+  - wire-cell-toolkit/zfj74rs
+
+# for wct_0-28-0_glpk-hdf-root
+specs:
+  - wire-cell-toolkit/cbwhesd
+#+end_example
+After configuring, the ~wcwc~ user must "concretize" each senv.  Among other things this populates the environment's view.
+
+#+begin_example
+spack env activate wct_0-28-0
+spack concretize
+spack env deactivate
+spack env activate wct_0-28-0_glpk-hdf-root
+spack concretize
+spack env deactivate
+#+end_example
+The user may then use, eg, ~spack activate env wct_0-28-0~.  See section [[Spack Environments]].
+
+
+** Other compilers
+:PROPERTIES:
+:CUSTOM_ID: spack-compiler
+:END:
+
+The above uses the Debian 12 system compiler,
+
+#+begin_example
+$ which gcc
+/usr/bin/gcc
+$ gcc -v
+gcc version 12.2.0 (Debian 12.2.0-14)
+#+end_example
+In order to facilitate testing/compiling WCT with other compilers, we may have Spack build them.
+
+#+begin_example
+$ sudo apt install gcc-12 clang-16
+$ spack compiler add --scope site
+
+$ spack compiler list
+-- clang debian12-x86_64 ----------------------------------------
+clang@16.0.6
+
+-- gcc debian12-x86_64 ------------------------------------------
+gcc@12.2.0
+
+$ spack install wire-cell-toolkit %clang
+$ spack install wire-cell-toolkit %clang +root
+
+$ spack install gcc@13.2.0
+
+$ spack load gcc@13.2.0
+$ spack compiler add --scope site
+$ spack unload gcc@13.2.0
+
+$ spack install llvm@18.1.3  # provides "clang/clang++"
+#+end_example
+
+#+begin_note
+It the ~--scope site~ option for ~spack compiler add~ is somewhat important.  Otherwise the default "user" scope will be modified.  See section [[#spack-scopes]] for more information.
+#+end_note
+
+
+** Updating Spack
+:PROPERTIES:
+:CUSTOM_ID: spack-updates
+:END:
+
+Over time, the Spack base installation or a Spack repo may require updating.  To update the base installation, simply (re)run:
+#+begin_example
+wcwc spackinst --tag v0.22.1
+#+end_example
+The explicit ~--tag~ option is required if the desired version is not the ~wcwc~ default.
+
+Updating a (non-base) repo is done similarly
+#+begin_example
+
+#+end_example
+
+
+* Issues
+:PROPERTIES:
+:CUSTOM_ID: issues
+:END:
+
+This section collects special issues, problems, advanced configuration, etc.
+
+
+** Multiple spacks
+:PROPERTIES:
+:CUSTOM_ID: spack-scopes
+:END:
+
+Spack has the concept of a hierarchy of [[https://spack.readthedocs.io/en/latest/configuration.html#configuration-scopes][configuration scope]].  The coarse "default" and "site" scope are set by the Spack "instance" (the installation of the Spack code and built-in repo).  Some examples of instances are those provided by WCWC's in ~/wcwc~, FNAL's in ~/cvmfs~ and others that may have been installed by the user.
+
+When a Spack command is run, its scope is narrowed by the "user" scope that is defined by the contents of =~/.spack/=.  By default, some ~spack~ commands will add information to the "user" scope that is relevant to a the broader instance scope.
+
+*** WCWC admin guidance
+
+To avoid these problems when managing a Spack instance, the WCWC admin must take care to not populate their user scope with instance-level information.  Besides potentially confusing the admin user, doing so would deprive the WCWC users of important information.  Some commands to be sure to narrow to "site" scope are:
+
+- ~spack repo add --scope site /path/to/repo~
+- ~spack compiler add --scope site~
+
+*** Expert user guidance
+
+The advanced user that utilizes multiple Spack instances from the same account should take care to use the ~spack~ command for each instance and avoid populating the default user scope =~/.spack/= with instance-specific information.  If that scope becomes tainted, the files (or file content) may be moved to a new directory which for Spack to consider.
+
+#+begin_example
+$ mkdir ~/.spack-wcwc
+$ mv ~/.spack/<somefile>.yaml ~/.spack/
+$ /wcwc/spack/local/bin/spack --config-scope ~/.spack-wcwc <command> [command options]
+
+# and eg
+
+$ /other/spack/local/bin/spack --config-scope ~/.spack-other <command> [command options]
+#+end_example
+
+#+begin_note
+The ~--config-scope~ is considered in addition to the default user scope =~/.spack/=.
+#+end_note
+
+** Overzealous purge
+
+It is possible to purge dependency packages needed by dependent packages.  They can be seen as ~[-]~ entries in a ~spack spec~.  They can be reinstalled with
+
+#+begin_example
+spack install --include-build-deps <spec>
+#+end_example
+
+
+
+** FNAL /art/ Spack
+:PROPERTIES:
+:CUSTOM_ID: fnal-spack
+:END:
+
+
+Recently a strong effort to Spackify building the art/nusoft/larsoft stack has made some good progress.  Each of the three tiers has its own Spack repo which we add in the same way as we did ~wire-cell-spack~.
+
+#+begin_example
+git clone https://github.com/FNALssi/fnal_art.git /wcwc/spack/repos/fnal_art
+spack repo add --scope site /wcwc/spack/repos/fnal_art
+spack install art
+
+git clone https://github.com/NuSoftHEP/nusofthep-spack-recipes.git /wcwc/spack/repos/nusofthep-spack-recipes
+spack repo add --scope site /wcwc/spack/repos/nusofthep-spack-recipes
+
+git clone https://github.com/LArSoft/larsoft-spack-recipes.git
+spack repo add --scope site /wcwc/spack/repos/larsoft-spack-recipes
+spack install larsoft
+#+end_example
+
+#+begin_note
+The ~fnal_art~ repo includes a ~wirecell~ package, not to be confused with the ~wire-cell-toolkit~ package from ~wire-cell-spack~ repo from which the ~wirecell~ packaging was originated.  Both build the Wire-Cell toolkit and have started to diverge (mostly new things in ~wire-cell-toolkit~).  They need to be synchronized and a plan developed to keep them roughly in sync going forward.
+#+end_note
+
+** Spack mirror 
+
+TBD, investigate using and providing Spack source and binary mirrors.
+
+
+
+
+* Meta :noexport:
+
+#+begin_src sh :results output drawer
+cat ~/.ssh/id_hierocles.pub ~/.ssh/id_rsa.pub > wcwc.pub
+scp wcwc.pub wcwc.org wcwc.html wcwc.pdf wcwc@lycastus.bnl:public_html/
+scp wcwc.pub wcwc.org wcwc.html wcwc.pdf hierocles.bnl:public_html/wire-cell/docs/
+#+end_src
+
+#+RESULTS:
+:results:
+:end:
+
+
+
+
+
+# Local Variables:
+# eval: (setq org-html-self-link-headlines t)
+# End:

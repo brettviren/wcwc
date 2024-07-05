@@ -1,0 +1,63 @@
+#+title: WCWC Task List and Status
+
+Most of the todo items cover several activities 
+- developing / prototyping
+- documenting
+- demonstrating / presenting
+- capturing for replication (~wcwc~ sub-command, ansible, container)
+
+The to do list:
+  
+- [-] Get basic Spack structure working
+  - [X] Initialize ~/wcwc~ from green field
+  - [X] Chain wire-cell spack repo
+  - [ ] Chain up to ~fnal_art~
+  - [ ] Chain up to ~larsoft~
+  - [ ] Chain up to ~sbnd~
+  - [ ] Chain up to ~dune~
+- [ ] Developer environments
+  - [ ] make some shared environments
+  - [ ] shared environment for WCT dev
+  - [ ] private environment for WCT dev
+- [ ] Wire-Cell prototype
+  - [ ] Develop a WCP ~package.py~ in ~wire-cell-spack~
+  - [ ] Make some shared environments
+  - [ ] shared environment for WCP dev
+  - [ ] private environment for WCP dev
+- [ ] WC/LS environment
+  - [ ] install nusoft
+  - [ ] install art
+  - [ ] install larsoft    
+  - [ ] Make some shared environments
+  - [ ] demo/document using shared environment for WC/LS dev
+  - [ ] demo/document using private environment for WC/LS dev
+- [ ] WCWC OS
+  - [ ] Define remote user account mgt.  (NIS?)
+  - [ ] Home directory sharing (NFS/automount?)
+  - [ ] Set up servers, if applicable.
+  - [ ] Automate client config (ansible?)
+  - [ ] SSH key distribution?
+- [-] WCWC GPU workstations
+  - [X] Spec
+  - [ ] Purchase
+  - [ ] Receive
+  - [ ] Place
+  - [ ] 10 Gbps point-to-point
+  - [ ] Configure for remote user
+  - [ ] Configure for WCWC software
+  - [ ] Configure for CUDA
+    - [ ] Capture CUDA setup in doc and/or ~wcwc~ 
+- [ ] WCWC GPU workstation shakedown
+  - [ ] Run SP+DNNROI on PD sim
+  - [ ] Compare CPU vs GPU throughput
+  - [ ] Write note.
+- [ ] Support containers
+  - [ ] Build ~/wcwc~ via minimal container.
+  - [ ] Export ~/wcwc~ content to host.
+  - [ ] Serve ~/wcwc~ from container.
+  - [ ] WCWC services (NIS, NFS, rsync) from containers.
+  - [ ] Build application containers from ~/wcwc~ content.
+    - [ ] CPU only
+    - [ ] CPU+GPU
+  - [ ] Test app container on non-WCWC computer
+    
