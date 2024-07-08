@@ -32,6 +32,14 @@ You will find related but not essential additional information in notes such as 
 
 In this section we describe the tasks required for your workstation to gain membership to WCWC.
 
+** Network connectivity
+
+Assure your workstation meets these network connectivity criteria:
+
+- If you wish to NFS-mount the WCWC software volume, your workstation must reside on a LAN with the WCWC NFS-server.  Otherwise, your workstation may be able to use ~rsync~ to maintain a copy of WCWC software.
+
+- If you wish to the WCWC admin to assist in configuring your workstation or if you wish to NFS-mount your home directory to other WCWC systems on the shared LAN your workstation must have a static IP address.  Contact your network administrators to request a static IP.
+
 ** Operating system 
 :PROPERTIES:
 :CUSTOM_ID: user-os
@@ -40,38 +48,54 @@ In this section we describe the tasks required for your workstation to gain memb
 A WCWC user workstation must run a supported OS.  The supported OSes may be listed with:
 
 #+begin_src shell :results list :exports both
-wcwc oslist
+wcwc list-oses
 #+end_src
 
 #+RESULTS:
-- Debian
-  GNU/Linux
-  12
-  (bookworm)
-- Debian
-  GNU/Linux
-  trixie/sid
+: - Debian GNU/Linux 12 (bookworm)
 
-Or to check if your workstation runs a supported OS
+You can see what your workstation runs with:
 
 #+begin_src shell :results none :exports code :noeval
-wcwc oscheck
+lsb_release -ds
 #+end_src
-This command is silent unless the OS fails.
-Once you have installed a supported OS you must assure vairous OS-level packages are installed with:
 
-#+begin_src shell :results none :exports code :noeval
-wcwc osinst
-#+end_src
-This may prompt you for your ~sudo~ password in order to run ~apt~.
+** WCWC administrator access
 
-** Spack software
+After assuring the OS is from the list of those supported and the workstation has a static IP address you may request assistance from your WCWC admin to perform additional configuration.  To enable access, append the public SSH keys provided by your WCWC admin to:
+
+#+begin_example
+/root/.ssh/authorized_keys
+#+end_example
+
+#+begin_note
+The BNL WCWC admin keys are here:
+
+https://www.phy.bnl.gov/~bviren/wire-cell/docs/wcwc.pub
+
+Non-BNL WCWC systems should not install them.
+#+end_note
+
+** OS Packages
+
+At least the following OS packages are required:
+#+begin_example
+sudo apt-get install nfs-common rsync direnv \
+    build-essential ca-certificates coreutils curl environment-modules \
+    gfortran git gpg lsb-release python3 python3-distutils python3-venv \
+    unzip zip openssh-server openssh-client
+#+end_example
+
+** WCWC software area
 :PROPERTIES:
 :CUSTOM_ID: spack-soft
 :END:
 
-The non-OS software for WCWC usage is provided by a Spack instance provided by your WCWC admin.  When WCWC workstation and server are on the same LAN the best way to access the Spack instance is via NFS.  In this case, you should add this line to your ~/etc/fstab~ file:
+Software is provided as a Spack installation.  A WCWC client may access the software either by an NFS-mount or an rsync copy.  The standard location on the client is ~/wcwc~ though alternatives may be used.  Subsequent examples assume the default and BNL WCWC specifics.
 
+*** NFS mount
+
+As root user, add this line to your ~/etc/fstab~ file:
 #+begin_example
 lycastus.phy.bnl.gov:/wcwc /wcwc nfs4 _netdev,auto  0  0
 #+end_example
@@ -82,65 +106,60 @@ mount /wcwc
 #+end_example
 In the future ~/wcwc~ should be mounted automatically at boot.
 
+*** Rsync copy
+
+If you are unable or unwilling to use NFS mount you may use ~rsync~ to periodically freshen a copy of the WCWC area.  
+#+begin_example
+rsync --del -a <name>:/wcwc/ /wcwc/
+#+end_example
+
 #+begin_note
-Your workstation may effectively become a WCWC member even if it does not reside at BNL or on another LAN that provides a WCWC server by copying or otherwise syncing the ~/wcwc~ directory from a full WCWC member workstation.
+In the example, ~<name>~ refers to a stanza in the user's ~.ssh/config~ that describes how to access a WCWC workstation that provides ~/wcwc~.  Take care to include trailing slashes (~/~).
 #+end_note
 
+** NFS-export home directory
+
+t.b.d.
 
 * Software usage
 :PROPERTIES:
 :CUSTOM_ID: user-software
 :END:
 
-You may simply use WCWC software in one or more ways as supported by Spack.  Without repeating the good Spack documentation, here we briefly outline some ways to do this.
+You may use WCWC software in any manner supported by Spack.  Spack documentation is very good and should be read.  Here, we briefly outline.
 
-** Spack environment
+** Spack shell environment
 :PROPERTIES:
 :CUSTOM_ID: spack-env
 :END:
 
-Spack provides several ways to use the software it provides.  Most involve initial configuration of your shell environment.  Spack supports several popular shells.  To see what are supported:
-#+begin_src shell :results list :exports both
-ls /wcwc/spack/local/share/spack/setup-env.*
-#+end_src
+An end-user (not developer) may wish to use Spack Environment Modules to configure their shell environment to use some package.  This is a two step processes.
 
-#+RESULTS:
-- /wcwc/spack/local/share/spack/setup-env.csh
-- /wcwc/spack/local/share/spack/setup-env.fish
-- /wcwc/spack/local/share/spack/setup-env.ps1
-- /wcwc/spack/local/share/spack/setup-env.sh
-
-Source the one that matches your shell:
-
-#+begin_src shell :results output :exports both :wrap example
-source /wcwc/spack/local/share/spack/setup-env.sh
-type spack
-#+end_src
-
-#+RESULTS:
-#+begin_example
-spack is a function
-spack () 
-{ 
-    : this is a shell function from: /wcwc/spack/local/share/spack/setup-env.sh;
-    : the real spack script is here: /wcwc/spack/local/bin/spack;
-    _spack_shell_wrapper "$@";
-    return $?
-}
-#+end_example
-
-#+begin_note
-Spack's "setup" script defines a /shell function/ named ~spack~ in addition to placing the ~spack~ program in your ~$PATH~.  Both are effectively identical but the shell function form is able to further modify your shell environment.  After "sourcing" the setup script, the function is used when calling ~spack~.  alternatively, you may wish to start a /subshell/ to contain Spack environment changes: ~bash --rcfile /wcwc/spack/local/share/spack/setup-env.sh~
-#+end_note
-
-
-** Spack Environment Modules
+*** Internalize spack to your shell
 :PROPERTIES:
-:CUSTOM_ID: spack-sem
+:CUSTOM_ID: spackify
 :END:
 
-We may rely on Spack's support for [[https://modules.readthedocs.io/][Environment Modules]] as one simple way to use Spack software in a piecemeal manner.
 
+Find the Spack shell "setup" script matching your shell:
+#+begin_example
+ls /wcwc/spack/base/repo/share/spack/setup-env.*
+#+end_example
+Source the one that matches your shell.  The ~wcwc~ command can also help to discover the right script.
+#+begin_example
+wcwc spack-setup
+source `wcwc spack-setup`
+#+end_example
+This causes the ~spack~ command to become a shell function.
+
+To avoid mutating your current shell environment you may wish to start a new one:
+#+begin_example
+bash --rcfile `wcwc spack-setup -s bash`
+#+end_example
+
+*** Loading an environment module
+
+After internalizing Spack environment as in section [[#spackify]] you may further modify your shell environment to make use of various software packages in a piecemeal manner using Spack's support for [[https://modules.readthedocs.io/][Environment Modules]].
 #+begin_example
 $ spack load root
 $ root --version
@@ -149,9 +168,10 @@ Built for linuxx8664gcc on Jun 04 2024, 20:14:19
 From heads/master@tags/v6-30-06
 $ spack unload root
 #+end_example
-When Spack provides more than one instance of a particular package you must uniquely qualify which to load by providing a more detailed Spack *spec* instead of just a simple package name.  
 
 #+begin_note
+When Spack provides more than one instance of a particular package you must uniquely qualify which to load by providing a more detailed Spack *spec* instead of just a simple package name.  
+
 To discover all installed instances of a package and their qualifiers use, for example the command ~spack find root~.  See the Spack [[https://spack.readthedocs.io/en/latest/basic_usage.html#sec-specs][Basic Usage manual]] and Spack "spec" [[https://spack.readthedocs.io/en/latest/spack.html#module-spack.parser][reference docs]] for more info on how to provide a Spack *spec*.
 #+end_note
 
@@ -177,30 +197,84 @@ $ echo $SPACK_ENV
 #+end_example
 
 #+begin_note
-The ~--dir~ indicates the directory to hold the environment bookkeeping files and it tells Spack that this is a personal environment.  
+The ~--dir~ indicates the directory to hold the environment bookkeeping files and it tells Spack that this is a personal environment.
+
+As ~spack env activiate~ modifies your shell environment you must first follow the steps to internalize Spack environment as in section [[#spackify]].
 #+end_note
 
-Once an environment is activated it /narrows/ many Spack commands.  In particular, no packages are available until we "add" them:
+It is now possible to add *previously installed* packages
 #+begin_example
-$ spack install --add root
+$ spack add root
+$ spack concretize
 $ which root
 /home/bv/my-env/.spack-env/view/bin/root
 #+end_example
 
-#+begin_note
-You may only "add" package instances to a personal environment that are already built in the Spack area.  As that area is read-only you may not "install" novel ones.  Contact your WCWC admin to "install" any novel package instances that you may need.  You may also learn about [[https://spack.readthedocs.io/en/latest/chain.html][chaining Spack installations]] to augment the central Spack area with your own. 
-#+end_note
-Later, in a fresh shell, we may reactivate the environment by giving the environment directory that was created
-
+Later, in a fresh shell, we may reactivate the environment by giving the environment directory that was previously created:
 #+begin_example
 $ spack env activate my-env
 $ which root
 /home/bv/my-env/.spack-env/view/bin/root
 #+end_example
 
+
+*** Environments and chaining for user installation
+:PROPERTIES:
+:CUSTOM_ID: user-install-area
+:END:
+
+
+Spack supports "chaining" Spack installations.  A user can employ this feature to install packages that do not exist in the main Spack installation area.  To enable this, modify the ~spack.yaml~ file created in the Spack Environment directory to add ~config~ and ~upstreams~ entry like:
+
+#+begin_src yaml
+spack:
+  config:
+    install_tree:
+      root: /home/rootless/junk/my-env/install
+    build_stage:
+      - /home/rootless/junk/my-env/stage
+    source_cache: /home/rootless/junk/my-env/cache
+  upstreams:
+    base:
+      install_tree: /srv/bv/wcwc/spack/base/install
+#+end_src
 #+begin_note
-We will later exploit this to provide an environment for developing software.
+You will see other entries in the environment's ~spack.yaml~ which were added by ~spack~.  In particular the ~specs~ list will be filled with any package specs named with ~spack add~
 #+end_note
+
+You can now install packages and add them to the environment.  For example:
+#+begin_example
+spack install --add jsonnet
+#+end_example
+
+
+*** Chaining for WCWC software stacks
+
+The WCWC Spack packaging is composed of different Spack "repos".  Each provides packaging for a portion of an overall stack.  Each repo is configured to have its own installation area via a Spack /scope/.  If one repo depends on another it is chained via Spack /upstreams/ mechanism in order to satisfy dependencies.  We saw this same upstream chaining above when configuring the environment with its own ~install_area~.  There, the upstreams consisted of just the "base" installation.
+
+The environment can be constructed on a particular portion the software stack.  For example:
+#+begin_example
+spack env deactivate   # if needed to exit a prior environment
+spack env activate --create --dir my-env-wct
+#+end_example
+
+In ~spack.yaml~ we must list the full upstream chain.
+#+begin_src yaml
+spack:
+  upstreams:
+    wirecell:
+      install_tree: /wcwc/spack/wirecell/install
+    base:
+      install_tree: /wcwc/spack/base/install
+  repos:
+  - /wcwc/spack/wirecell/repo
+#+end_src
+We can then (fake) "install" and add packages provided by the upstream:
+#+begin_example
+spack install --add wire-cell-toolkit
+#+end_example
+To install novel package instance not provided by the upstreams, set the other ~config~ items as described in section [[#user-install-area]].
+
 
 *** Shared environments
 :PROPERTIES:

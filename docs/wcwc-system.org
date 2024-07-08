@@ -16,44 +16,28 @@
 :CUSTOM_ID: intro
 :END:
 
-The Wire-Cell team has developed a system to cluster computers for the purpose of sharing hardware, software and human resources with a focus on Wire-Cell related development.  It is given the name Wire-Cell Workstation Cluster (WCWC) as it is composed primarily of team members' workstations.
+The Wire-Cell team has developed a system to cluster computers for the purpose
+of sharing hardware, software and human resources with a focus on enabling
+Wire-Cell related research and development.  It is given the name Wire-Cell
+Workstation Cluster (WCWC) as it is composed primarily of workstations used by team members.
 
-This document describes the WCWC in some detail.  It assumes the audience is the author/developer of WCWC (in the future when memory fades), others that wish to implement WCWC on their computers or just anyone interested in all the details.  Users who simply want to know the basics of how they can join and take advantage of WCWC may wish to focus on the [[file:wcwc-user.org]] document and come back to this document if they wish to learn more.  Many of the specific details are coded into the ~wcwc~ program that is available from https://github.com/wirecell/wcwc.  Many of the examples below will utilize this program.
+This document describes the WCWC in some detail.  It assumes the audience is the author/developer of WCWC (to be read in the future after memory has faded), others that wish to implement WCWC on their computers or just anyone interested in the technical details.  Users who simply want to know the basics of how they can join and take advantage of WCWC may wish to read the [[file:wcwc-user.org][WCWC User]] document and come back to this document if they wish to learn more.
 
-* Basics
-:PROPERTIES:
-:CUSTOM_ID: basics
-:END:
+Some tasks to be performed in constructing and maintaining a WCWC are intricate enough to require automation in order to replicate.  These tasks are captured as commands provided by the ~wcwc~ program.  This program should be available from the same location as this document or the from the [[https://github.com/wirecell/wcwc][WCWC GitHub repo]].  Many of the examples given in this document will rely on this program.
 
-To get started, a workstation owner should follow these steps:
+* Overview
 
-1. Install Debian stable (currently 12 aka "bookworm") on your workstation.
-2. Run the following as root (see section [[NFS Client]] for more info):
-   #+begin_example
-   apt install nfs-common
-   mkdir /wcwc
-   mount -t nfs lycastus.phy.bnl.gov:/ro/wcwc /wcwc
-   #+end_example
-3. As a normal user, and assuming bash shell:
-   #+begin_example
-   source /wcwc/spack/local/share/spack/setup-env.sh
+At the center of the WCWC is a shared software installation constructed and
+managed by Spack.  A workstation may mount or otherwise host a copy of the Spack
+installation tree to give its users access to a large amount of software.  This
+software is expected to span use and development of Wire-Cell Toolkit and
+Prototype and /art/-based projects including LArSoft and experiment code such as
+developed by DUNE and SBND.  Simple and flexible means to configure end-user and
+developer environments based on Spack are provided.
 
-   spack find
-   spack load <spec>
+WCWC workstation OSes are configured to allow remote login to WCWC users.  This may be provided by manual local account administration or by configuring the workstation to participate in WCWC user account system (NIS).
 
-   # or
-
-   spack env list
-   spack env activate <name>
-   #+end_example
-4. Optional, give the WCWC admin(s) SSH access to the ~root~ user of your workstation.
-   #+begin_example
-   sudo mkdir -p /root/.ssh   # if needed
-   sudo chmod 700 /root/.ssh  # if needed
-   curl http://lycastus.phy.bnl.gov/~wcwc/wcwc.pub | sudo tee -a /root/.ssh/authorized_keys
-   #+end_example
-   This URL is internal to the BNL wired campus network.  
-See the [[file:wcwc-user.org]] document for more details.
+A WCWC workstation provides its users access to WCWC software either by an NFS mount or an rsync copy of the Spack install area.  Workstation home directories may be local or NFS mounted via automount.  Data directories my likewise be NFS-mounted or their data served via the WCWC Xrootd system.
 
 
 * Users
@@ -812,6 +796,18 @@ Updating a (non-base) repo is done similarly
 
 #+end_example
 
+
+** NIS
+
+** Xrootd
+
+** Remote user accounts
+
+- [ ] home directory mounting? NFS?
+  - id mapping
+  - https://unix.stackexchange.com/a/464950
+- [ ] account info? NIS? nss-extrausers?
+- [ ] authentication? password? SSH keys only?
 
 * Issues
 :PROPERTIES:

@@ -1,3 +1,6 @@
 *~
 latexmk-out
 *.tex
+*.spec
+*.json
+*.txt
