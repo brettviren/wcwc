@@ -11,6 +11,41 @@
 #+end_src
 
 
+* Unfiled
+
+** WCWC software area
+:PROPERTIES:
+:CUSTOM_ID: spack-soft
+:END:
+
+Software is provided as a Spack installation.  A WCWC client may access the software either by an NFS-mount or an rsync copy.  The standard location on the client is ~/wcwc~ though alternatives may be used.  Subsequent examples assume the default and BNL WCWC specifics.
+
+*** NFS mount
+
+As root user, add this line to your ~/etc/fstab~ file:
+#+begin_example
+lycastus.phy.bnl.gov:/wcwc /wcwc nfs4 _netdev,auto  0  0
+#+end_example
+Perform this further, one time action:
+#+begin_example
+mkdir /wcwc
+mount /wcwc
+#+end_example
+In the future ~/wcwc~ should be mounted automatically at boot.
+
+*** Rsync copy
+
+If you are unable or unwilling to use NFS mount you may use ~rsync~ to periodically freshen a copy of the WCWC area.  
+#+begin_example
+rsync --del -a <name>:/wcwc/ /wcwc/
+#+end_example
+
+#+begin_note
+In the example, ~<name>~ refers to a stanza in the user's ~.ssh/config~ that describes how to access a WCWC workstation that provides ~/wcwc~.  Take care to include trailing slashes (~/~).
+#+end_note
+
+
+
 * Introduction
 :PROPERTIES:
 :CUSTOM_ID: intro
@@ -713,6 +748,11 @@ So, for example:
 spack env create wct_0-28-0
 spack env create wct_0-28-0_glpk-hdf-root
 #+end_example
+Or, with ~wcwc~
+#+begin_example
+
+#+end_example
+
 Each command will create and print the directory housing configuration for each Spack Environment.  One must then edit the ~config.yaml~ and at least add the WCT spec to the ~specs~ list.
 
 #+begin_example

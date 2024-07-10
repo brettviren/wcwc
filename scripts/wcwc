@@ -28,9 +28,9 @@ import sys
 import json
 import yaml
 import click
+import shutil
 import graphlib
 import functools
-import subprocess
 from pathlib import Path
 from collections import namedtuple
 
@@ -41,27 +41,84 @@ info = log.info
 warn = log.warn
 error = log.error
 
-def call(*cmd, **opts):
+
+# Code may use parts of subprocess 
+from subprocess import STDOUT, PIPE, CalledProcessError
+
+def run(cmd, lines=None, capture_error=True, *args, **opts):
     '''
-    Run and check command, return stdout.
+    Apply default policy to subprocess.run()
+
+    If lines provides an integer, stdout is decoded to string and up to that
+    many newline-delimited lines are returned instead of a CompletedProcess
+    object.  The end of the string does NOT have a new line.
+
+    If capture_error is true (default) then an error return code will lead to
+    the stdout and stderr being logged prior to throwing.
     '''
-    if isinstance(cmd[0], str):
+    from subprocess import run as srun
+    if isinstance(cmd, str):
         opts["shell"]=True
-    debug(f"call: {cmd} {opts}")
-    return subprocess.check_output(*cmd, **opts).decode()
+    opts.setdefault("capture_output", True)
+    opts.setdefault("check", False)
+    if capture_error:
+        opts["check"] = False
+    debug(f'exec: {cmd} {args} {opts}')
+    rc = srun(cmd, *args, **opts)  # throws
+    if capture_error and rc.returncode:
+        error(f'command failed: {cmd}')
+        error(f'output:\n{rc.stdout.decode()}')
+        error(f'error:\n{rc.stderr.decode()}')
+        rc.check_returncode()   # raise the exception
+
+    if not lines:
+        return rc
+    return '\n'.join(rc.stdout.decode().strip().split("\n")[:lines])
 
 
-def run(*cmd, **opts):
+def which(exe, def_cli=None, *def_args, **def_opts):
     '''
-    Run a command.  Return successful return code.
-    '''
-    if isinstance(cmd[0], str):
-        opts["shell"]=True
-    debug(f"run: {cmd} {opts}")
-    got = subprocess.run(*cmd, **opts)
-    got.check_returncode()
-    return got
+    Find program "exe" and return a function that is called like:
 
+        func(cli=None, *args, **opts)
+
+    When this function is called the exe is executed with addition command line
+    args cli.
+
+    If def_* are given to which(), they provide initial defaults that cli, args
+    and opts amend.
+
+    The cmd=exe+cli, args and opts are passed to run().
+    '''
+    path = shutil.which(str(exe))
+    if path is None:
+        raise FileNotFoundError(f'no such executable "{exe}"')
+    
+    def func(cli=None, *args, **opts):
+
+        parts = [[path], def_cli, cli]
+        if any([isinstance(p,str) for p in parts]):
+            # any a string, all a string
+            line = list()
+            for i,p in enumerate(parts):
+                if isinstance(p, str):
+                    line.append(p)
+                elif p:
+                    line.append(' '.join(p))
+            line = ' '.join(line)
+        else:                   # no strings, only array
+            line = []
+            for p in parts:
+                if p: line += list(p)
+
+        if not args: args = list()
+        args = def_args or list() + args
+
+        if not opts: opts = dict()
+        opts = def_opts or dict () | opts
+
+        return run(line, *args, **opts)
+    return func
 
 def merge_patch(target, patch):
     '''
@@ -130,28 +187,7 @@ class Config:
 
     @functools.cached_property
     def spack_exe(self):
-        exe = self.paths("base").root / "repo" / "bin" / "spack"
-        if not exe.exists():
-            error(f'no spack found at {exe}')
-            error('have you run "wcwc install-spack" yet?\n')
-            raise click.BadArgumentUsage("no spack found")
-        return exe
-
-
-    def spack(self, *args, runner=run, **kwds):
-        '''
-        Execute spack.
-
-        If args[0] is a string it is executed as a shell command line.
-        O.w. args is a list providing the arguments to the spack command.
-
-        Runner may be "run" or "call".
-        '''
-        exe = self.spack_exe
-        if isinstance(args[0], str):
-            return runner(str(exe) + " " + args[0], **kwds)
-        return runner([str(exe)] + args, **kwds)
-
+        return self.paths("base").root / "repo" / "bin" / "spack"
 
     def save(self):
         self.cfg_path.parent.mkdir(parents=True, exist_ok=True)
@@ -185,14 +221,14 @@ class Config:
         Return all canonical paths for repo.
         '''
         root = self.prefix / "spack" / name
-        more = {k:root/k for k in "scope repo install".split()}
+        more = {k:root/k for k in "scope repo install environments".split()}
         more['git'] = root / "repo" / ".git"
         if name == "base":
             # Connect with Spack's structure that differs from how WCWC handles
             # others.  "repo" refers to Spack repo not git repo though these two
             # coincide for the "chained" repos.
             more['repo'] = more['repo'] / "var" / "spack" / "repos" / "builtin"
-        return namedtuple("Paths", "root scope repo install git")(root=root, **more)
+        return namedtuple("Paths", "root scope repo install environments git")(root=root, **more)
 
 
     def assure_repo(self, name, recurs=False, force=False):
@@ -220,7 +256,8 @@ class Config:
         cfg_file("repos.yaml", dict(repos=[str(paths.repo)]))
 
         config_dat = dict(build_stage=['$user_cache_path/stage'],
-                          install_tree=dict(root=str(paths.install)))
+                          install_tree=dict(root=str(paths.install)),
+                          environments_root=str(paths.environments))
         
         ups = repo.get("upstreams", None)
         if ups:
@@ -257,11 +294,7 @@ class Config:
 
         paths = self.paths(name)
 
-        def git(cli, *args, quiet=False, **kwds):
-            kwds['cwd'] = paths.repo
-            func = call if quiet else run
-            cli = 'git ' + cli
-            return func(cli, *args, **kwds)
+        git = which("git", cwd=paths.repo)
 
         if not paths.repo.exists():
             url = repo['url']
@@ -276,12 +309,12 @@ class Config:
             return
 
         want_branch = f'wcwc-{tag}'
-        have_branch = git("rev-parse --abbrev-ref HEAD", quiet=True)
+        have_branch = git("rev-parse --abbrev-ref HEAD")
         if have_branch == want_branch:
             return
 
         try:
-            git(f'show-ref --verify --quiet refs/heads/{want_branch}', quiet=True)  # call to see if fails
+            git(f'show-ref --verify --quiet refs/heads/{want_branch}')  # call to see if fails
         except:
             git(f'checkout -b {want_branch} {tag}')
         else:
@@ -345,11 +378,13 @@ def dump_config(ctx):
 @cli.command("status")
 @click.pass_context
 def status(ctx):
+    git = which("git")
+
     for repo in ctx.obj.repos:
         paths = ctx.obj.paths(repo)
         git_dir = paths.git
         if git_dir.exists():
-            ver = call(f'git --git-dir {git_dir} rev-parse --abbrev-ref HEAD').strip()
+            ver = git(f'--git-dir {git_dir} rev-parse --abbrev-ref HEAD', lines=1)
             info(f'{repo} {ver}')
         else:
             info(f'{repo} missing')
@@ -357,7 +392,7 @@ def status(ctx):
 @cli.command("check-os")
 def check_os():
     """Check if current running OS is supported"""
-    got = call("lsb_release -ds").strip()
+    got = run("lsb_release -ds", lines=1)
     if got in known_oses:
         return
     raise ValueError(f'not a supported OS: {got}')
@@ -386,8 +421,9 @@ def spack(ctx, scope, args):
         if not "/" in scope:    # path
             scope = str(ctx.obj.paths(scope).scope)
         args = ["-C", scope] + args
-    ctx.obj.spack(*args)
-        
+    exe = which(ctx.obj.spack_exe)
+    got = exe(args, capture_output=False, check=False)
+    sys.exit(got.returncode)
 
 @cli.command("list-scopes")
 @click.pass_context
@@ -465,8 +501,8 @@ To avoid giving --prefix define:
     if shell == "auto":
         shell = os.environ.get("SHELL",None)
         if not shell:
-            user = os.environ.get("USER", call("id -u -n"))
-            shell = call(f"getent passwd {user}").split(":")[6]
+            user = os.environ.get("USER", run("id -u -n", lines=1))
+            shell = run(f"getent passwd {user}", lines=1).split(":")[6]
         if not shell:
             raise ValueError("can not divine shell")
     shell = shell.split("/")[-1].strip()  #  if given as /path/to/shell
@@ -479,35 +515,39 @@ To avoid giving --prefix define:
     
 @cli.command("devenv")
 @click.option("-U","--upstreams",default=None, type=str,
-              help=f"override upstreams (comma separated list)")
+              help="override upstreams (comma separated list)")
 @click.argument("path")
 @click.pass_context
 def devenv(ctx, upstreams, path):
     '''
-    Create a Spack environment based on one or more upstreams.
+    Create a Spack environment with associated upstreams.
 
-    Once activated, user can install packages to it.
+    Once activated, packages may be installed.
     '''
-    path = Path(path)
+
+    path = Path(path).absolute()
+    if path.exists():
+        debug(f'devenv: exists at {path}')
+    else:
+        sexe = which(ctx.obj.spack_exe)
+        sexe(f'env create --dir {path}')
 
     spack_yaml = path / "spack.yaml"
-    if spack_yaml.exists():
-        debug(f'environment already exists at {path}')
-    else:
-        ctx.obj.spack(f'env create --dir {path}')
 
-    upstreams = upstreams.split(",")
-    if not upstreams:
-        return
-    upstreams = ctx.obj.resolve_upstreams(*upstreams)
-    upstreams.reverse()
+    dat = dict()
 
+    if upstreams:
+        upstreams = upstreams.split(",")
+        upstreams = ctx.obj.resolve_upstreams(*upstreams)
+        upstreams.reverse()
 
-    dat = dict(upstreams=dict(), repos=list())
-    for name in upstreams:
-        paths = ctx.obj.paths(name)
-        dat["upstreams"][name] = dict(install_tree=str(paths.install))
-        dat["repos"].append(str(paths.repo))
+        dat["upstreams"] = dict()
+        dat["repos"] = list()
+        for name in upstreams:
+            paths = ctx.obj.paths(name)
+            dat["upstreams"][name] = dict(install_tree=str(paths.install))
+            dat["repos"].append(str(paths.repo))
+
     dat["config"] = dict(
         install_tree=dict(root=str(path / "install")),
         build_stage=[str(path / "stage")],
@@ -515,9 +555,9 @@ def devenv(ctx, upstreams, path):
 
     old_dat = yaml.safe_load(spack_yaml.read_text())
     new_dat = merge_patch(old_dat, dict(spack=dat))
-    print (new_dat)
     spack_yaml.write_text(yaml.dump(new_dat, sort_keys=False))
-
+    debug(f"devenv made at {path.absolute()} with upstreams {upstreams}")
+    info(f'Activate with:\n\tsource `wcwc spack-setup`\n\tspack env activate {path.absolute()}')
 
 if '__main__' == __name__:
     cli()

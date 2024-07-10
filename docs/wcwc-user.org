@@ -1,7 +1,7 @@
-#+title: The Wire-Cell Workstation Cluster for Users
+#+title: The Wire-Cell Workstation Cluster
 #+setupfile: ~/org/setup.org
 #+setupfile: ~/org/setup-topic.org
-#+setupfile: ~/org/setup-darksun.org
+#+setupfile: ~/org/setup-readtheorg.org
 #+options: toc:t
 
 * meta :noexport:
@@ -16,117 +16,282 @@
 :CUSTOM_ID: intro
 :END:
 
-This document describes how you can use the Wire-Cell workstation cluster (WCWC).  We describe how to incorporate your workstation into a WCWC and then how to benefit from WCWC membership.  In order to remain brief we provide a single, /opinionated/ way to use WCWC while a creative user should know that WCWC supports other usage patterns.  We also describe WCWC with references to its implementation on the BNL campus network.  Other institutions may replicate WCWC on their LAN.
+This document describes the Wire-Cell workstation cluster (WCWC).  Sections [[#enroll]], [[#base]] and [[#stacks]] are intended to provide easy entry points to WCWC users (including using WCWC for software development). Section [[#spack]] gives a summary of information about Spack that is most salient to users of WCWC and developers of WCWC infrastructure.  Section [[#further]] provides guidance on optional ways to use WCWC.  And finally section [[#rest]] gives details on various parts of how WCWC is constructed and works.
 
-Many of the workflows described here are provided by the ~wcwc~ command may be downloaded from https://github.com/wirecell/wcwc and placed in your ~$PATH~.  Run ~wcwc~ with no arguments to get usage information.  That repository also provides this document and collects other files related to WCWC.
+* Workstation enrollment
+:PROPERTIES:
+:CUSTOM_ID: enroll
+:END:
+
+As described here, WCWC instance resides on the BNL campus network.  It is comprised of a subset of the workstations used by the BNL Wire-Cell team.  To enroll a workstation into WCWC the owner must satisfy these requirements:
+
+- Be a custodian or otherwise primary user of a workstation on the BNL campus network.
+- Install a supported OS (currently Debian 12 / "bookworm").
+- Request a static IP from BNL DNS admins and configure the OS to use it.
+- Add the [[https://www.phy.bnl.gov/~bviren/wire-cell/docs/wcwc.pub][BNL WCWC admin SSH public]] keys to ~/root/.ssh/authorized_keys~.
+- Notify the WCWC admin for further OS configuration and discuss any special needs.
+
+A workstation may then be integrated into a WCWC in a variety of ways.  One main outcome is that the directory
+#+begin_example
+/wcwc
+#+end_example
+becomes available.  This directory provides all WCWC software.
 
 #+begin_note
-You will find related but not essential additional information in notes such as this one.
+People are encouraged to make use of WCWC in other clusters and are free to apply their own structure.  A single user on a laptop can benefit from becoming its own WCWC.  Guidance on alternative WCWC structures is given in the section [[#further]]
 #+end_note
 
-
-* User workstation configuration
+* Base software stack
 :PROPERTIES:
-:CUSTOM_ID: user-config
+:CUSTOM_ID: base
 :END:
 
-In this section we describe the tasks required for your workstation to gain membership to WCWC.
 
-** Network connectivity
+With enrollment from section [[#enroll]] completed, we now provide a set of examples for how using the base software stack provided by WCWC.  Here, a "stack" refers to a particular set of packages.  A "package" refers to the abstract notion of some software project's body of work.  Each package in the stack may be installed to produce a package "instance" along with a concrete set of other packages instances that provide dependencies.  You may select among the instances for the purposes of running the software they provide or for developing against their libraries.
 
-Assure your workstation meets these network connectivity criteria:
+The WCWC software is built with the ~spack~ command from the [[https://spack.io/][Spack project]].  The ~spack~ command is exposed to the WCWC user and will be used in the examples without providing much explanation.  The user may read the excellent Spack documentation and refer to the [[file:wcwc-system.org][WCWC System]] document for additional details.
 
-- If you wish to NFS-mount the WCWC software volume, your workstation must reside on a LAN with the WCWC NFS-server.  Otherwise, your workstation may be able to use ~rsync~ to maintain a copy of WCWC software.
+For new users, take note that the subsequent section [[#stacks]] repeats the examples from this section in forms modified to make use of "extended software stacks" that provide additional packages such as those relevant to Wire-Cell.
 
-- If you wish to the WCWC admin to assist in configuring your workstation or if you wish to NFS-mount your home directory to other WCWC systems on the shared LAN your workstation must have a static IP address.  Contact your network administrators to request a static IP.
+** Spack shell environment
 
-** Operating system 
-:PROPERTIES:
-:CUSTOM_ID: user-os
-:END:
-
-A WCWC user workstation must run a supported OS.  The supported OSes may be listed with:
-
-#+begin_src shell :results list :exports both
-wcwc list-oses
-#+end_src
-
-#+RESULTS:
-: - Debian GNU/Linux 12 (bookworm)
-
-You can see what your workstation runs with:
-
-#+begin_src shell :results none :exports code :noeval
-lsb_release -ds
-#+end_src
-
-** WCWC administrator access
-
-After assuring the OS is from the list of those supported and the workstation has a static IP address you may request assistance from your WCWC admin to perform additional configuration.  To enable access, append the public SSH keys provided by your WCWC admin to:
-
+The examples will rely on some initial shell environment configuring.
+Discover and load a shell environment script appropriate for your shell:
 #+begin_example
-/root/.ssh/authorized_keys
+$ ls /wcwc/spack/base/repo/share/spack/setup-env.*
+
+$ source /wcwc/spack/base/repo/share/spack/setup-env.sh
 #+end_example
 
 #+begin_note
-The BNL WCWC admin keys are here:
-
-https://www.phy.bnl.gov/~bviren/wire-cell/docs/wcwc.pub
-
-Non-BNL WCWC systems should not install them.
+Users who wish to may avoid such global shell environment manipulation.  See the document [[file:wcwc-alt.org]] for guidance on alternative methods.
 #+end_note
 
-** OS Packages
 
-At least the following OS packages are required:
-#+begin_example
-sudo apt-get install nfs-common rsync direnv \
-    build-essential ca-certificates coreutils curl environment-modules \
-    gfortran git gpg lsb-release python3 python3-distutils python3-venv \
-    unzip zip openssh-server openssh-client
-#+end_example
-
-** WCWC software area
+** Ad-hoc use of individual packages
 :PROPERTIES:
-:CUSTOM_ID: spack-soft
+:CUSTOM_ID: spack-load
 :END:
 
-Software is provided as a Spack installation.  A WCWC client may access the software either by an NFS-mount or an rsync copy.  The standard location on the client is ~/wcwc~ though alternatives may be used.  Subsequent examples assume the default and BNL WCWC specifics.
 
-*** NFS mount
 
-As root user, add this line to your ~/etc/fstab~ file:
+Next, discover available package *instances*.
 #+begin_example
-lycastus.phy.bnl.gov:/wcwc /wcwc nfs4 _netdev,auto  0  0
+$ spack find
 #+end_example
-Perform this further, one time action:
+Finally, modify your shell environment to use a package instance and its dependencies.
 #+begin_example
-mkdir /wcwc
-mount /wcwc
+$ spack load root
+
+$ root --version
+ROOT Version: 6.30/06
 #+end_example
-In the future ~/wcwc~ should be mounted automatically at boot.
-
-*** Rsync copy
-
-If you are unable or unwilling to use NFS mount you may use ~rsync~ to periodically freshen a copy of the WCWC area.  
+To finalize the session you may exit the shell or unload any that were previously loaded
 #+begin_example
-rsync --del -a <name>:/wcwc/ /wcwc/
+$ spack unload root
+#+end_example
+
+When more than one instance of a package is installed, you may need to provide a more concrete [[https://spack.readthedocs.io/en/latest/basic_usage.html#sec-specs][spec]] than just a package name.  Here are some ways to better specify what to "load" after we discover available versions and variants of a package:
+#+begin_example
+$ spack find -lv root
+
+$ spack load root@6.30.06
+
+$ spack load root+minut
+
+$ spack load root/arvd7i3
+#+end_example
+
+
+** Durable shell environment
+:PROPERTIES:
+:CUSTOM_ID: spack-env
+:END:
+
+A user can go far with just ~spack load~ but it becomes challenging to reproduce a particular shell environment as more packages and more specific packages are required.  To solve this, "Spack Environments" can be used.  For simple end-user, creating and using them can be done with:
+#+begin_example
+$ spack env activate --create --dir my-env
+$ spack add root
+$ spack concretize
+#+end_example
+This creates the directory ~my-env~ which will hold various items and acts as a [[https://spack.readthedocs.io/en/latest/configuration.html#configuration-scopes][Spack configuration scope]].
+The *spec* given to ~spack add~ is equivalent to what you may given to ~spack load~.  Later in a fresh shell the shell environment configuration can be regained with:
+#+begin_example
+$ spack env activate my-env
 #+end_example
 
 #+begin_note
-In the example, ~<name>~ refers to a stanza in the user's ~.ssh/config~ that describes how to access a WCWC workstation that provides ~/wcwc~.  Take care to include trailing slashes (~/~).
+After initial creation, more packages can be subsequently added.  Run ~spack concretize~ after doing so.
 #+end_note
 
-** NFS-export home directory
+To return your shell environment to the state before activating a Spack Environment, issue:
+#+begin_example
+$ spack env deactivate
+#+end_example
 
-t.b.d.
+You may ~rm~ a Spack Environment directory manually or have Spack do it:
+#+begin_example
+$ spack env remove my-env
+#+end_example
 
-* Software usage
+** Developer environment
 :PROPERTIES:
-:CUSTOM_ID: user-software
+:CUSTOM_ID: spack-devenv
 :END:
 
-You may use WCWC software in any manner supported by Spack.  Spack documentation is very good and should be read.  Here, we briefly outline.
+A Spack Environment, such as created in section [[#spack-env]] can be used to develop software in a simple way that is otherwise independent from Spack itself.  The exact steps depend on the software but in general:
+
+1. Obtain the source tree (eg, via ~git clone~) for the package you will develop.
+2. Configure its build system to search ~/path/to/my-env/.spack-env/view~ for dependencies.
+3. Build your package as usual.
+
+   See section [[#stack-dev]] for a concrete example.
+
+
+** User-installation of Spack packages 
+
+The Spack Environment created in section [[#spack-env]] *must* only ~spack add~ Spack package instances that have already been installed in the base Spack installation.  It is not possible for a user to ~spack install~ novel package instances into these limited Spack Environments.
+
+However, such installation of Spack packages into the user Spack Environment can be supported after we modify the Spack Environment configuration file to point Spack at writable filesystem locations.
+This can be done by editing the ~spack.yaml~ file in the environment directory but more easily it may be done using the provided ~wcwc~ command.
+#+begin_example
+wcwc devenv my-env
+#+end_example
+This command can be used to create the environment or to "upgrade" a previous environment to one from which packages may be installed.  Installation then performed like:
+#+begin_example
+spack env activate my-env
+spack install --add <spec>
+#+end_example
+The ~--add~ will add the resulting package instance to the environment after installation.
+
+
+** Spack develop support
+:PROPERTIES:
+:CUSTOM_ID: spack-develop
+:END:
+
+In section [[#spack-devenv]] we give basics for leveraging a Spack environment to develop some software in a manner that is otherwise not Spack-aware.
+Spack also provides support for  [[https://spack-tutorial.readthedocs.io/en/latest/tutorial_developer_workflows.html#][developing software]] for which Spack does have a package recipe.
+#+begin_example
+$ spack add coreutils
+$ spack concretize
+$ spack develop coreutils@9.4
+$ spack install
+$ echo >> my-env/coreutils/src/false.c
+$ spack install  # rebuilds
+#+end_example
+
+The ~spack install~ acts like a ~make install~ type step though it also includes configuring the local build system.  This makes it somewhat slow to use for extended development sessions.
+
+We may clear out the development package:
+#+begin_example
+$ spack undevelop coreutils
+#+end_example
+
+* Extended software stacks
+:PROPERTIES:
+:CUSTOM_ID: stacks
+:END:
+
+
+So far, we have made use of the base Spack install.  WCWC provides support for extended software stacks that are on top of this base.  The list of supported stacks is evolving but current as of this writing the stack support status is as follows:
+
+- base :: the stack provided by Spack itself.
+- wirecell :: provides Wire-Cell Toolkit (supported) and Wire-Cell Prototype (tbd) through the [[https://github.com/wirecell/wire-cell-spack][wire-cell-spack]] repo.
+- nusoft :: (tbd) [[https://github.com/NuSoftHEP/nusofthep-spack-recipes][nusoft recipes]] repo provides a base fo FNAL software used by neutrino experiments.
+- art :: (tbd) the [[https://github.com/FNALssi/fnal_art.git][fnal art]] repo with support for /art/ and some other general packages including another packaging for Wire-Cell Toolkit
+- larsoft :: (tbd) [[https://github.com/LArSoft/larsoft-spack-recipes][larsoft recipes]] for building LArSoft.
+- dune :: (tbd) DUNE experiment software on top of /art/ and LArSoft
+- dune :: (tbd) SBND experiment software on top of /art/ and LArSoft  
+
+To use an extended software stack you must tell Spack to consider a corresponding Spack *scope*.  As mentioned in section [[#spack-env]], a scope is a directory holding Spack configuration files that augment configuration provided in other, more general scopes.  WCWC provides a scope for each stack in a predictable location:
+#+begin_example
+/wcwc/spack/<stack>/scope/
+#+end_example
+We can now repeat the previous examples using an extended stack.
+
+** Using individual packages from a stack
+
+In section [[#spack-load]] we used ~spack load~ to configure our shell environment to use a package from the base Spack.  For an extended stack, we repeat the same commands but tell Spack about the stack's scope.
+#+begin_example
+$ source /wcwc/spack/base/repo/share/spack/setup-env.sh
+$ spack --config-scope=/wcwc/spack/wirecell/scope find wire-cell-toolkit
+$ spack --config-scope=/wcwc/spack/wirecell/scope load wire-cell-toolkit
+#+end_example
+
+#+begin_note
+Depending on your shell, it may be critical to use the ~=~ when giving the scope.  See [[https://github.com/spack/spack/issues/41936][Spack issue 41936]].
+#+end_note
+
+** Environments based on a stack
+:PROPERTIES:
+:CUSTOM_ID: stack-env
+:END:
+
+
+In section [[#spack-env]] we constructed Spack Environments that were built on the base Spack.  Here we repeat that example but build the environment on an extended stack.  In this context the stack's scope is called an /upstream/ and we need merely list them in the ~wcwc devenv~ command:
+#+begin_example
+wcwc devenv -U wirecell my-env
+#+end_example
+As before, this command can be run on an existing environment or to create a new one.  We may then activate the environment and ~add~ existing package instances from the extended stack or ~install~ them.
+#+begin_example
+$ spack env activate my-env
+$ spack install --add wire-cell-toolkit
+
+$ which wire-cell
+/path/to/my-env/.spack-env/view/bin/wire-cell
+
+$ wire-cell --help
+...
+#+end_example
+
+** Develop on a stack
+:PROPERTIES:
+:CUSTOM_ID: stack-dev
+:END:
+
+
+In section [[#spack-devenv]] we outlined how to develop software by leveraging an installation in a Spack Environment's view tree.  Using the environment created on the ~wirecell~ stack in section [[#stack-env]] we give a concrete example of configuring the Wire-Cell Toolkit build to do just that:
+#+begin_example
+$ spack env activate my-env  # from before, and see note below
+
+$ git clone git@github.com:wirecell/wire-cell-toolkit.git wct
+$ cd wct/
+$ ./wcb configure --prefix=/path/to/my-env/.spack-env/view/
+$ ./wcb
+#+end_example
+This is a minimal example and more control is likely applied with the various ~--with-*~ options supported by ~wcb~.
+
+#+begin_note
+Some caution is needed with using an instance of the Spack installation of ~wire-cell-toolkit~ that includes dependencies on the ~root~ (ROOT) package.  This package includes defining the ~CC~ and ~CXX~ shell environment variables to the compilers provided by the versions of ~Clang~ internal to ROOT.  Besides causing the development build to use the wrong compilers, they do not behave correctly.  You *must* unset ~CC~ and ~CXX~ after the ~spack activate~. 
+#+end_note
+
+* Spack overview
+:PROPERTIES:
+:CUSTOM_ID: spack
+:END:
+
+
+Above we used the ~spack~ command as a catalyst for configuring our shell environment to use some installed software.  This command is part of the Spack software project which provides a broad set of features related to software management.  In addition to shell configuration,
+Spack is a software "meta build" system.  It automates running the build systems of various software packages, honoring dependencies and organizing the products.  Spack can appear daunting to a new user but once a few of its concepts are understood it becomes approachable.  The concepts are often named and discussed with some ambiguity and so we provide a clear definition of the important ones here:
+
+- package recipe :: A [[https://spack.readthedocs.io/en/latest/packaging_guide.html][recipe]] is a simple Python module found as ~<package>/package.py~ that provides instructions to Spack for how the native build system provided by the package source can be exercised.  Spack may then automatically apply the recipe, along with any build options and dependency constraints to produce a *package instance*.  Ambiguous with *instance*, it is not uncommon for a package recipe to be referred to simply as a "package".
+- package instance :: The collection of files produced by a package installation residing under an *install tree* in an installation *prefix* sub-directory named with a pattern constructed from metadata known as a *projection*.  This allows multiple variant installations of the same package to coexist on disk.  Ambiguous with *recipe*, it is not uncommon for a package instance to be referred to simply as a "package".
+- package repo :: A [[https://spack.readthedocs.io/en/latest/repositories.html][repo]] holds a collection of package recipes along with a ~repo.yaml~ configuration file.  It may be provided as a dedicated git repository.  Spack provides the ~builtins~ repo as part of its overall source tree that currently contains about 8,000 package recipes.  Smaller repos are distributed to build special-purpose portions of a software stack.  One example is [[https://github.com/wirecell/wire-cell-spack][wire-cell-spack]].
+- spec :: A [[https://spack.readthedocs.io/en/latest/basic_usage.html#sec-specs][spec]] describes a *package instance* using a [[https://spack.readthedocs.io/en/latest/spack.html#module-spack.parser][small markup language]].  The simplest and most abstract spec is simply a package name.  To reduce ambiguity, more information can be added including the software version, build variant parameters, compiler and even the specs of dependencies.  From a potentially abstract spec and a set of package recipes, Spack can fully determine the spec including all dependencies in a process call *concretization*.
+- scope :: A [[https://spack.readthedocs.io/en/latest/configuration.html#configuration-scopes][scope]] is directory with Spack configuration files.  Scopes follow an inheritance hierarchy.  This allows defining a scope to override some specific configuration as a particular task may require.  Common parameters that a scope may modify include the location of the install tree or other directories used by Spack or to redefine which repos that Spack should consider.
+- view :: A [[https://spack.readthedocs.io/en/latest/packaging_guide.html#views][view]] is a directory tree with the usual ~{bin/,lib/,include/}~ etc sub-directories that one may expect under, /eg/ the ~/usr/local/~ prefix of Unix convention.  The contents of view represents the union of a number of package *instances* as viewed from their installation *prefix*.  The files from the selected instances are symlinked into the view tree.
+- shell :: Spack has three closely related, easily confused but distinct concepts related to the user shell environment.  First, Spack can modify the user shell environment after the appropriate ~spack-env.*~ script is "sourced".  Then ~spack load <package>~ can apply a Spack [[https://spack.readthedocs.io/en/latest/command_index.html#spack-load][environment module]] further modify the shell environment to use the named package.  A more sophisticated version of this is a Spack [[https://spack.readthedocs.io/en/latest/environments.html][environment]] which combines a *view* and a *scope*.  When an environment is *activated* the user shell environment is modified to make use of the software in the view.  In both cases shell environment is modified to add to standard ~PATH~-like variables and any custom configuration specified in package recipes are applied.
+
+
+With these basic concepts given, the remainder of this section provides guidance and examples for common tasks.
+
+
+** Basics of running Spack
+
+Spack is run from a command named ~spack~.  
+
+
 
 ** Spack shell environment
 :PROPERTIES:
@@ -180,7 +345,28 @@ To discover all installed instances of a package and their qualifiers use, for e
 :CUSTOM_ID: spack-envs
 :END:
 
-Spack Environments provide a persistent and more sophisticated way to specify your shell environment configuration than do the similarly named Spack Environment Modules.  They come in two types with different policy: personal and shared.
+[[https://spack.readthedocs.io/en/latest/environments.html][Spack Environments]] provide a persistent and more sophisticated and powerful way to specify your shell environment configuration than do the similarly named Spack Environment Modules.  They come in two types:  "anonymous" (aka "personal") and "managed" (aka "shared").
+
+- anonymous :: User is fully in control of the life cycle from creation to destruction.  User may add packages that have been installed by Spack
+
+
+You the user are fully in control of the life cycle of a personal environment and you may install your own Spack packages in addition to adding 
+
+ .  On the other hand, the Spack admin is in charge of the life cycle of managed environments so that users can benefit from sharing a common software stack and be freed from management duties.  A user should prefer using a managed environment unless there are none suitably defined.
+
+The rest of this section describes how to create both types and how to exploit them for using and developing software.  The examples are kept brief by using the ~wcwc~ tool.  For understanding the details of what this tool is doing, see the [[file:wcwc-system.org]] document.
+
+*** Environment creation
+
+A user creates a personal environment and
+
+*** Managed environments
+
+Guidance for an admin to actually create a managed environment is in the [[file:wcwc-system.org]] document.  An end-user can list available managed environments:
+#+begin_example
+
+#+end_example
+
 
 *** Personal environments
 :PROPERTIES:
@@ -300,9 +486,102 @@ $ which root
 Shared environments can be useful for end users but their *view* directory is not writable.  A user can not modify shared environments.
 #+end_note
 
-* Software development environments
+* Going further
 :PROPERTIES:
-:CUSTOM_ID: sw-dev-envs
+:CUSTOM_ID: further
 :END:
 
 A Spack Environment can be used to provide a basis for software development as its *view* directory, ie  ~$SPACK_ENV/.spack-env/view~, acts similarly to the traditional Unix ~/usr~ or ~/usr/local~ prefix.  To build a software package under development you may provide this prefix or in many cases rely on packages to be found via ~PKG_CONFIG_PATH~ and ~CMAKE_PREFIX_PATH~ that are set by the Spack Environment activation. 
+
+** Spack views
+:PROPERTIES:
+:CUSTOM_ID: view
+:END:
+
+The kernel of a Spack Environment is a Spack View.  A view aggregates package instances via the file system to that they appear to be installed in a single ~/usr/local~-style tree.  Some reasons you may prefer a View over an Environment is for their simplicity, to put more control (and responsibility) into your hands or to avoid global modification to your shell environment.  Using a Spack View is also limiting.  While you will be able to "add" existing package instances to a view (and that's about all you can do) you will not be able to ~spack install~ novel packages into the view.  A *view* also has no Spack *scope* and so no way to override ~spack~ configuration. Of course, you can create your own scope but that step quickly takes you back to the pattern followed by Spack Environment and you are likely best off using that.
+
+No spack shell environment modifications are required to create and use views but you will need to run the ~spack~ program directly.  You make a view by adding package instances:
+
+#+begin_example
+$ /wcwc/spack/base/repo/bin/spack \
+  --config-scope=/wcwc/spack/wirecell/scope \
+  view add -i my-view wire-cell-toolkit
+
+$ ls -l my-view/bin/wire-cell 
+lrwxrwxrwx 1 bv bv 141 Jul 10 15:22 my-view/bin/wire-cell -> /wcwc/spack/wirecell/install/linux-debian12-haswell/gcc-12.2.0/wire-cell-toolkit-0.28.0-rpjtpyms7morqmfi5zym5l7ftbwsnn7q/bin/wire-cell
+#+end_example
+
+View has one more trick.  If your desire is to use the view tree as a basis for development of a particular package, and Spack knows how to build that package, you may wish to provide all dependencies for that package but exclude the package itself.  This can be done like:
+
+#+begin_example
+$ rm -rf my-view
+
+$ /wcwc/spack/base/repo/bin/spack \
+  --config-scope=/wcwc/spack/wirecell/scope \
+  view -e wire-cell-toolkit add -i my-view wire-cell-toolkit
+
+$ ls -l my-view/bin/wire-cell
+ls: cannot access 'my-view/bin/wire-cell': No such file or directory
+
+$ ls -l my-view/lib/libspdlog.so
+lrwxrwxrwx 1 bv bv 129 Jul 10 15:24 my-view/lib/libspdlog.so -> /wcwc/spack/base/install/linux-debian12-haswell/gcc-12.2.0/spdlog-1.13.0-ja5i24ki6bu4lq3c262jjqpqvwrlr47q/lib/libspdlog.so
+#+end_example
+
+** Using ~direnv~
+:PROPERTIES:
+:CUSTOM_ID: direnv
+:END:
+
+
+The [[https://direnv.net/][direnv]] program provides features similar to a Spack Environment.  See its very excellent documentation to learn how to configure your shell to utilize it.
+
+Direnv can be used to provide functionality similar to a Spack Environment and can even exploit the existence of one.  However, it offers alternative behavior in how shell environment is configured.  Instead of issuing explicit ~spack env activate~ and ~spack env deactivate~ commands, use of ~direnv~ allows the user to simply ~cd~ into a direnv-controlled directory tree.  Once the user changes out of this tree the configuration settings are automatically undone.
+
+A view tree, be it bare as in section [[#view]] or part of a Spack Environment, can be easily used from a direnv ~.envrc~ file.  This is particularly useful pattern it to place a view one level under where ~.envrc~ resides:
+#+begin_example
+$ /wcwc/spack/base/repo/bin/spack \
+  --config-scope=/wcwc/spack/wirecell/scope \
+  view -e wire-cell-toolki add -i my-work/view wire-cell-toolkit
+
+$ git clone git@github.com:wirecell/wire-cell-toolkit.git my-work/toolkit
+$ git clone git@github.com:wirecell/wire-cell-python.git  my-work/python
+
+$ cat << EOF > my-work/.envrc
+layout python
+load_prefix \$PWD/view
+# load_prefix misses this?
+PKG_CONFIG_PATH="\$PKG_CONFIG_PATH:\$PWD/view/share/pkgconfig"
+EOF
+
+$ cd my-work
+$ direnv allow
+
+$ cd python
+$ pip install -e .
+$ cd ..
+
+$ cd toolkit
+$ ./wcb configure --prefix=$DIRENV_DIR/view
+$ ./wcb
+$ ./wcb install
+#+end_example
+Likely you will wish to further control ~wcb~ with some number of ~--with-*~ flags.  This uses a trick to install the build products right into the view.  This makes a view a mix of symlinks and real files, but it works just fine.  You may elide the ~wcb install~ and run the build products in-place by adding some more lines to ~.envrc~ like:
+
+#+begin_example
+export BATS_LIB_PATH=$PWD/toolkit/test
+PATH_add $PWD/toolkit/test/bats/bin
+PATH_add $PWD/toolkit/build/apps
+path_add LD_LIBRARY_PATH $PWD/toolkit/build/{apps,aux,cuda,gen,iface,img,pgraph,sig,sigproc,sio,tbb,util,root,clus}
+#+end_example
+
+Revisiting this project in the future requires simply:
+#+begin_example
+$ cd my-work
+#+end_example
+See the direnv documentation for all the useful tricks you can do in an ~.envrc~ file.  
+
+
+* Nuts and bolts
+:PROPERTIES:
+:CUSTOM_ID: rest
+:END:

@@ -4,3 +4,4 @@ latexmk-out
 *.spec
 *.json
 *.txt
+my-*
