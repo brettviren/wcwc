@@ -1,7 +1,7 @@
 #+title: WCWC - The Wire-Cell Workstation Cluster
 #+setupfile: ~/org/setup.org
 #+setupfile: ~/org/setup-topic.org
-#+setupfile: ~/org/setup-darksun.org
+#+setupfile: ~/org/setup-readtheorg.org
 #+options: toc:t
 
 * meta :noexport:

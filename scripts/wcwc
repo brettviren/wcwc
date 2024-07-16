@@ -67,8 +67,10 @@ def run(cmd, lines=None, capture_error=True, *args, **opts):
     rc = srun(cmd, *args, **opts)  # throws
     if capture_error and rc.returncode:
         error(f'command failed: {cmd}')
-        error(f'output:\n{rc.stdout.decode()}')
-        error(f'error:\n{rc.stderr.decode()}')
+        out = rc.stdout.decode() if rc.stdout else ""
+        error(f'output:\n{out}')
+        err = rc.stderr.decode() if rc.stderr else ""
+        error(f'error:\n{err}')
         rc.check_returncode()   # raise the exception
 
     if not lines:
@@ -231,14 +233,14 @@ class Config:
         return namedtuple("Paths", "root scope repo install environments git")(root=root, **more)
 
 
-    def assure_repo(self, name, recurs=False, force=False):
+    def assure_stack(self, name, recurs=False, force=False):
         '''
         Assure a repo is configured.
         '''
-        self.assure_repo_clone(name, recurs)
-        self.assure_repo_scope(name, recurs, force)
+        self.assure_stack_clone(name, recurs)
+        self.assure_stack_scope(name, recurs, force)
 
-    def assure_repo_scope(self, name, recurs=False, force=False):
+    def assure_stack_scope(self, name, recurs=False, force=False):
         '''
         Assure that a repo scope is configured.
         '''
@@ -246,7 +248,7 @@ class Config:
 
         if recurs and repo.get("upstreams", ()):
             for usr in repo['upstreams']:
-                self.assure_repo_scope(usr, True)
+                self.assure_stack_scope(usr, True)
 
         paths = self.paths(name)
 
@@ -280,7 +282,7 @@ class Config:
                  
 
 
-    def assure_repo_clone(self, name, recurs=True):
+    def assure_stack_clone(self, name, recurs=True):
         '''
         Assure that repo of given name is cloned and at the right tag.
 
@@ -290,7 +292,7 @@ class Config:
 
         if recurs and repo.get("upstreams", ()):
             for usr in repo['upstreams']:
-                self.assure_repo_clone(usr, True)
+                self.assure_stack_clone(usr, True)
 
         paths = self.paths(name)
 
@@ -408,22 +410,25 @@ def list_oses():
 
 @cli.command("spack", context_settings=dict(ignore_unknown_options=True,
                                             help_option_names=[]))
-@click.option("--scope", default=os.environ.get('SPACK_USER_CONFIG_PATH', "base"),
-              help="Set the spack scope by name, translates to -C/--config-scope directory")
+@click.option("--stack", default=os.environ.get('SPACK_USER_CONFIG_PATH', "base"),
+              help="Set the 'stack' by name, translates to -C/--config-scope directory")
 @click.argument("args", nargs=-1, type=click.UNPROCESSED)
 @click.pass_context
-def spack(ctx, scope, args):
+def spack(ctx, stack, args):
     '''
     Wrapper around calling spack.
     '''
     args = list(args)
     if not ("-C" in args or "--config-scope" in args):
-        if not "/" in scope:    # path
-            scope = str(ctx.obj.paths(scope).scope)
-        args = ["-C", scope] + args
-    exe = which(ctx.obj.spack_exe)
-    got = exe(args, capture_output=False, check=False)
-    sys.exit(got.returncode)
+        if not "/" in stack:    # convert to scope path
+            scope_path = str(ctx.obj.paths(stack).scope)
+        else:
+            scope_path = stack
+        args = ["-C", scope_path] + args
+    exe = which(ctx.obj.spack_exe, capture_error=False, capture_output=False, check=False)
+    got = exe(args)
+    rc = sys.exit(got.returncode)
+    sys.exit(rc.returncode)
 
 @cli.command("list-scopes")
 @click.pass_context
@@ -457,22 +462,24 @@ def use_repo(record = True):
         return wrapper
     return decorator
 
-@cli.command("install-repo")
+@cli.command("install-stack")
 @click.option("-r", "--recurs", is_flag=True, default=False,
               help="recurs over upstreams, if any (default=False)")
 @click.option("-f","--force", is_flag=True, default=False,
               help="force overwriting (default=False)")
 @use_repo()
 @click.pass_context
-def install_repo(ctx, recurs, force, name):
+def install_stack(ctx, recurs, force, name):
     '''
-    Install the named repo.
+    Install the spack support for the named stack.
 
     If recurs is True, upstreams with their default configuration will be installed.
 
-    If the repo name is not known and is new then at least URL is required.
+    If the stack name is not known and is new then at least URL is required.
+
+    No actual packages are installed.
     '''
-    ctx.obj.assure_repo(name, recurs, force)
+    ctx.obj.assure_stack(name, recurs, force)
     ctx.obj.save()
     
 

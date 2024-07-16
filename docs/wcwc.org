@@ -585,3 +585,187 @@ See the direnv documentation for all the useful tricks you can do in an ~.envrc~
 :PROPERTIES:
 :CUSTOM_ID: rest
 :END:
+
+This section is not intended for "normal" users but expert users, WCWC administrators or just anyone that wants to understand how WCWC works in more detail.
+
+** Ways to get the software
+
+This section gives details on how workstations may be configured to get the ~/wcwc~ software area.
+
+*** NFS client
+:PROPERTIES:
+:CUSTOM_ID: nfs-client
+:END:
+
+Most WCWC workstations will access the WCWC software under ~/wcwc~ via an NFS-mount.  This requires the workstation to share connectivity with an NFS-server providing this volume.  Typically this means the two computers must share a common LAN.
+
+To configure a workstation as an NFS client for the BNL WCWC run this as root:
+#+begin_example
+cat << EOF >> /etc/fstab
+lycastus.phy.bnl.gov:/wcwc /wcwc nfs4 _netdev,auto  0  0
+EOF
+
+mount /wcwc
+#+end_example
+The ~lycastus~ host is relevant only on the BNL campus network.
+
+
+*** Copy client
+:PROPERTIES:
+:CUSTOM_ID: copy-client
+:END:
+
+A workstation can instead provide ~/wcwc~ by periodically synchronizing its files from some other workstation that has it as an NFS-mount.  This can be preferred for home workstation or laptop use.
+
+A copy of ~/wcwc~ is fully "owned" by the user in this case and the user is free to use it as they wish.  However, it is recommended that the user *not* copy ~/wcwc~ so that it is owned by the normal user.  Instead, the ~/wcwc~ area should be managed by a special user.  This is to assure normal users can not write to the area and cause chaos.  As user ~root~, create the special user ~wcwc~ and make ~/wcwc~ with proper ownership:
+#+begin_example
+useradd -c 'Wire-Cell Workstation Cluster User' -d /home/wcwc -m -s /bin/bash wcwc
+mkdir /wcwc
+chown wcwc:wcwc /wcwc
+#+end_example
+You are free to copy files how you wish.  Use of ~rsync~ over ~ssh~ is recommended.  Configure the ~wcwc~ user's SSH config file like:
+#+begin_example
+mkdir .ssh
+chmod 700 .ssh
+cat << EOF >> ~/.ssh/config
+Host hierocles.bnl
+        ControlMaster auto
+        ControlPath ~/.ssh/socket-%r@%h:%p
+        ControlPersist 10m
+        ForwardAgent yes
+        ForwardX11 yes
+        HostKeyAlias hierocles
+        Hostname hierocles
+        PreferredAuthentications publickey
+        ProxyCommand ssh -A bviren@gateway.phy.bnl.gov -W %h:%p
+        ServerAliveInterval 60
+        User bviren
+EOF
+
+ssh hierocles.bnl
+#+end_example
+
+#+begin_note
+The example assumes a real BNL user (~bviren~) can SSH to a the ~wcwc~ account, forwarding an SSH key that allows access to a WCWC workstation (~hierocles~) via a BNL SSH gateway and that provides the ~/wcwc~ upstream mount.
+#+end_note
+
+Periodically run this ~rsync~ command to synchronize:
+#+begin_example
+$ rsync --del --archive hierocles.bnl:/wcwc/ /wcwc/
+#+end_example
+
+#+begin_note
+Including the trailing ~/~ in the source part is important.  The ~--del~ will cause the absence of any files in the source to be reflected in the destination.
+#+end_note
+
+*** Building from scratch
+:PROPERTIES:
+:CUSTOM_ID: build-it
+:END:
+
+The ~/wcwc~ directory, or indeed any location, can be populated from a green field replicating the steps used to produce the ~/wcwc~ directory on a "real" WCWC NFS server.  Start with a supported OS, install some packages and create a dedicated ~wcwc~ user:
+
+#+begin_example
+$ apt install build-essential ca-certificates coreutils curl environment-modules \
+  gfortran git gpg lsb-release python3 python3-distutils python3-venv unzip zip
+
+$ useradd -c 'Wire-Cell Workstation Cluster User' -d /home/wcwc -m -s /bin/bash wcwc
+$ mkdir /wcwc
+#+end_example
+
+The heavy lifting is done by the ~wcwc~ program.  The base Spack can be installed with
+#+begin_example
+$ wcwc install-stack
+#+end_example
+This will install into ~/wcwc~.   An alternative location can be given
+#+begin_example
+$ wcwc --prefix /srv/wcwc install-stack
+#+end_example
+Or, the ~WCWC_PREFIX~ shell environment variable may be set.
+
+By default the ~wcwc install-stack~ command will install the base Spack support.  To install other stacks, simply name them.
+#+begin_example
+$ wcwc install-stack wirecell
+#+end_example
+The known stacks name "upstream" stacks on which they depend.  This dependency tree can be walked to recursively install the target stack and any dependencies.
+#+begin_example
+$ wcwc install-stack -r wirecell 
+#+end_example
+If a stack is unknown to ~wcwc~ it can be specified.  See ~wcwc install-stack --help~.
+
+The result will be WCWC software area but currently with no actual packages installed.
+
+** Ways to provide the software
+
+*** NFS Server
+:PROPERTIES:
+:CUSTOM_ID: nfs-server
+:END:
+
+The primary distribution mechanism for the ~/wcwc~ area is simple NFS.  
+The following is needed to configure a WCWC workstation with this role:
+#+begin_example
+apt install nfs-kernel-server 
+
+useradd -c 'Wire-Cell Workstation Cluster User' -d /home/wcwc -m -s /bin/bash wcwc
+mkdir -p /nfs/ro/wcwc
+
+cat << EOF >> /etc/fstab
+/data1/wcwc /wcwc        none bind,uid=1001
+/data1/wcwc /nfs/ro/wcwc none bind,uid=1001
+EOF
+
+# one time
+mount /wcwc
+mount /nfs/ro/wcwc
+
+cat << EOF >> /etc/exports
+/nfs		130.199.22.0/23(ro,sync,crossmnt,no_subtree_check,fsid=0)
+/nfs/ro/wcwc	130.199.22.0/23(ro,sync,no_subtree_check)
+EOF
+
+exportfs -a
+showmount -e
+#+end_example
+
+The bind mount on ~/nfs~ are to satisfy certain NFS requirements and on ~/wcwc~ to provide a the canonical location when the root file system is too small to host software build products.   The IP addresses are examples relevant to the BNL campus network.
+
+Once a ~/wcwc~ is available, see section [[#build-it]] to intialize it with Spack stacks and section [[#installing-packages]] for populate ~/wcwc~ with package instances.
+
+*** Installing packages
+:PROPERTIES:
+:CUSTOM_ID: installing-packages
+:END:
+
+The WCWC Spack area is a little non-standard in that it is partitioned into "stacks".  Each stack exists under
+
+#+begin_example
+/wcwc/spack/<stack>/{environments,install,repo,scope}/
+#+end_example
+
+The ~base~ stack is Spack itself.  It's source resides under ~base/repo/~ and thus its actual Spack package repository is deeper under ~base/repo/var/spack/repos/builtin~.  The other stacks have their Spack package repository directly under ~<stack>/repo/~.
+
+When installing packages, the WCWC admin must take care to do so "in" the ~<stack>/scope/~ that provides the Spack package that is being installed.
+
+It is possible to install packages directly with the ~spack~ command but doing installations through ~wcwc~ can help to avoid shell environment configuration, more easily refer to a scope and support non-standard ~/wcwc~ locations.  To deal with non-standard locations:
+#+begin_example
+$ export WCWC_PREFIX=/path/to/nonstandard/wcwc  # not needed if using /wcwc
+$ alias wcwc /path/to/wcwc/scripts/wcwc         # or add to your PATH
+#+end_example
+
+To install to base stack.
+#+begin_example
+wcwc spack install zlib
+#+end_example
+To install to extended stack
+#+begin_example
+$ wcwc spack install --stack wirecell wire-cell-toolkit
+#+end_example
+
+*** Defining managed environments
+:PROPERTIES:
+:CUSTOM_ID: managed-env
+:END:
+
+
+TBD.
