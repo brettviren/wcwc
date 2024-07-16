@@ -1,0 +1,24 @@
+---
+- name: Enroll a workstation into WCWC
+  hosts: workstations
+  remote_user: root
+
+  tasks:
+
+    - name: Install WCWC workstation client packages
+      ansible.builtin.apt:
+        pkg:
+          - build-essential
+          - ca-certificates
+          - coreutils
+          - curl
+          - environment-modules
+          - gfortran
+          - git
+          - gpg
+          - lsb-release
+          - python3
+          - python3-distutils
+          - python3-venv
+          - unzip
+          - zip

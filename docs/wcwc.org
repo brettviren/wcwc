@@ -16,7 +16,11 @@
 :CUSTOM_ID: intro
 :END:
 
-This document describes the Wire-Cell workstation cluster (WCWC).  Sections [[#enroll]], [[#base]] and [[#stacks]] are intended to provide easy entry points to WCWC users (including using WCWC for software development). Section [[#spack]] gives a summary of information about Spack that is most salient to users of WCWC and developers of WCWC infrastructure.  Section [[#further]] provides guidance on optional ways to use WCWC.  And finally section [[#rest]] gives details on various parts of how WCWC is constructed and works.
+This document describes the Wire-Cell workstation cluster (WCWC).  Sections [[#enroll]], [[#base]] and [[#stacks]] are intended to provide easy entry points to WCWC users (including using WCWC for software development). Section [[#spack]] gives a summary of information about Spack that is most salient to users of WCWC and developers of WCWC infrastructure.  Section [[#further]] provides guidance on optional ways to use WCWC.  The section [[#nab]] gives details on various parts of how WCWC is constructed and works.  And finally the section [[#sysadmin]] describes use of Ansible to do OS-level sysadmin things for computers enrolled in a WCWC.
+
+This document, various tools and configuration are provided by the [[https://github.com/brettviren/wcwc][wcwc]] package.
+It provides a program called ~wcwc~ that automates various user and administration tasks.  It including [[https://docs.ansible.com/][Ansible]] recipes for OS level administration (see section [[#ansible]]).  The recommended way to use tools from this package is with a direnv activated shell.  See [[#direnv]].
+
 
 * Workstation enrollment
 :PROPERTIES:
@@ -187,6 +191,8 @@ We may clear out the development package:
 #+begin_example
 $ spack undevelop coreutils
 #+end_example
+
+
 
 * Extended software stacks
 :PROPERTIES:
@@ -532,8 +538,33 @@ lrwxrwxrwx 1 bv bv 129 Jul 10 15:24 my-view/lib/libspdlog.so -> /wcwc/spack/base
 :CUSTOM_ID: direnv
 :END:
 
-
 The [[https://direnv.net/][direnv]] program provides features similar to a Spack Environment.  See its very excellent documentation to learn how to configure your shell to utilize it.
+
+*** Use the ~wcwc~ package with direnv
+:PROPERTIES:
+:CUSTOM_ID: direnv-wcwc
+:END:
+
+The ~wcwc~ package provides the ~wcwc~ command and Ansible recipes.  Both rely on OS level packages.  Additional environment setting is provided to direnv-enabled shells with the included ~wcwc/.envrc~ file.
+
+ is from a direnv shell.  Initial installation is as follows:
+#+begin_example
+git clone git@github.com:brettviren/wcwc.git
+cd wcwc
+direnv allow
+
+wcwc --help
+#+end_example
+Subsequent use requires merely
+#+begin_example
+cd wcwc
+#+end_example
+
+
+*** Develop with direnv
+:PROPERTIES:
+:CUSTOM_ID: direnv-dev
+:END:
 
 Direnv can be used to provide functionality similar to a Spack Environment and can even exploit the existence of one.  However, it offers alternative behavior in how shell environment is configured.  Instead of issuing explicit ~spack env activate~ and ~spack env deactivate~ commands, use of ~direnv~ allows the user to simply ~cd~ into a direnv-controlled directory tree.  Once the user changes out of this tree the configuration settings are automatically undone.
 
@@ -583,7 +614,7 @@ See the direnv documentation for all the useful tricks you can do in an ~.envrc~
 
 * Nuts and bolts
 :PROPERTIES:
-:CUSTOM_ID: rest
+:CUSTOM_ID: nab
 :END:
 
 This section is not intended for "normal" users but expert users, WCWC administrators or just anyone that wants to understand how WCWC works in more detail.
@@ -769,3 +800,36 @@ $ wcwc spack install --stack wirecell wire-cell-toolkit
 
 
 TBD.
+
+* Sysadmin
+:PROPERTIES:
+:CUSTOM_ID: sysadmin
+:END:
+
+
+The OS level of WCWC workstations is managed by Ansible using recipes provided by the ~wcwc~ package.  See section [[#direnv-wcwc]] for the recommended way to use this package.  It assumes [[https://docs.ansible.com/ansible/latest/reference_appendices/config.html][Ansible-related environment]] as defined in ~wcwc/.envrc~.
+
+** Ansible setup
+:PROPERTIES:
+:CUSTOM_ID: ansible-setup
+:END:
+
+See [[https://docs.ansible.com/][Ansible docs]] for details on Ansible.  Here we give the highlights.  We refer to ~admin~ as a user on an Ansible [[https://docs.ansible.com/ansible/latest/getting_started/][control node]].  It is ~admin~ that runs Ansible commands.
+
+The configuration starts with a list of hosts (~wcwc/ansible/inventory.cfg~)
+#+begin_example
+  [workstations]
+  hierocles.bnl
+  # etc ...
+#+end_example
+Hostnames are fully qualified but are intended to match stanzas in an SSH configuration file and not necessarily DNS entries.  After adding a new host, check basic SSH connectivity allows login with no interruption for authentication (ie, ~ssh-agent~ key management is working).
+#+begin_example
+ssh root@hierocles.bnl
+#+end_example
+Then check Ansible configuration
+#+begin_example
+ansible-inventory --list
+ansible-inventory --host hierocles.bnl
+ansible workstations -m ping -l hierocles.bnl
+#+end_example
+All commands should succeed.
