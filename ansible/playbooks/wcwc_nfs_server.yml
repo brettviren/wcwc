@@ -1,0 +1,39 @@
+---
+
+- name: Configure WCWC NFS server
+  hosts: wcwc_nfs_servers
+  remote_user: root
+  roles:
+    - role: ansible-nfs-server
+      vars: 
+        nfs_server_exports:
+          - export:
+            access:
+              - hostname: '{{wcwc_lan}}'
+                options:
+                  - 'rw'
+                  - 'sync'
+                  - 'fsid=0'
+                  - 'no_subtree_check'
+            path: '/nfs'
+
+          - export:
+            access:
+              - hostname: '{{wcwc_lan}}'
+                options:
+                  - 'ro'
+                  - 'sync'
+                  - 'no_subtree_check'
+                  - 'root_squash'
+            path: '/nfs/wcwc'
+
+  tasks:
+    - name: Bind mount {{wcwc_real_path}} to local /wcwc
+      ansible.posix.mount:
+        src: "{{wcwc_real_path}}"
+        path: "{{wcwc_path}}"
+        opts: bind
+        fstype: none
+        state: present
+    
+    

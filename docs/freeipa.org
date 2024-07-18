@@ -1,0 +1,20 @@
+#+title: Using FreeIPA
+
+* Motivation
+
+Local accounts exist on current workstations and their IDs are all not unique.
+At the same time we want to allow $N_{users}$ to log into $N_{workstations}$ and
+creating local accounts does not scale well.  Further, users want to mount their
+~$HOME~ from their local workstation to a remote workstation.  NFS will not
+correctly handle file permissions given the lack of unique user IDs.  Using
+FreeIPA provides for distributed account management and (may?) provide user ID
+mapping (if not, we must change local user IDs and file permissions).
+
+The Physics department has a FreeIPA server (Kerberos, LDAP and bells and
+whistles) which is already used for SSH gateways and others.  It was used long
+ago to provide accounts to summer students on a set of workstations.  
+An Ansible  config from that era exists at
+#+begin_example
+gogs@git.phy.bnl.gov:bv/physics-server-config.git
+#+end_example
+In principle, it should be a relatively painless adoption.

@@ -1,0 +1,41 @@
+# general user workstations that go all-in with features
+workstations:
+  hosts:
+    hierocles.phy.bnl.gov:
+    heracles.phy.bnl.gov:
+    aswork.phy.bnl.gov:
+  vars:
+    wcwc_nfs_server: lycastus.phy.bnl.gov
+
+# systems providing some service
+servers:
+  hosts:
+    lycastus.phy.bnl.gov:    
+
+# all systems in the WCWC
+all_wcwc:
+  children:
+    workstations:
+    servers:
+  vars:
+    wcwc_path: /wcwc
+    wcwc_lan: '130.199.22.0/23'
+
+# workstations that nfs-mount /wcwc
+wcwc_nfs_mounters:
+  children:
+    workstations:
+    
+
+# systems providing /wcwc via NFS
+wcwc_nfs_servers:
+  hosts:
+    lycastus.phy.bnl.gov:
+  vars:
+    wcwc_real_path: '/data1/wcwc'
+    wcwc_path: '/wcwc'
+    wcwc_lan: '130.199.22.0/23'
+
+# possible todo:
+# - indicate workstation owner username
+# - expand to include non-BNL WCWC's
