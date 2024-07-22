@@ -1,0 +1,12 @@
+; DO NOT EDIT (unless you know what you are doing)
+;
+; This subdirectory is a git "subrepo", and this file is maintained by the
+; git-subrepo command. See https://github.com/ingydotnet/git-subrepo#readme
+;
+[subrepo]
+	remote = https://github.com/mrlesmithjr/ansible-nfs-server.git
+	branch = master
+	commit = f35ec754c804c608d6adc610fc2664511ef66643
+	parent = 85fc4cc4db6d0e401ee74758bfe5df79530957bf
+	method = merge
+	cmdver = 0.4.7
