@@ -1,6 +1,6 @@
 ---
-- name: Configure workstation to mount WCWC
-  hosts: all_wcwc
+- name: Configure WCWC workstation - run ipa-client-install manually first
+  hosts: workstations
   remote_user: root
 
   tasks:
@@ -22,6 +22,7 @@
           - keychain
           - lsb-release
           - nfs-kernel-server
+          - python-is-python3
           - python3
           - python3-distutils
           - python3-venv
@@ -29,5 +30,10 @@
           - unzip
           - zip
 
-    - name: Assure {{wcwc_path}} directory
-      action: file path={{wcwc_path}} state=directory
+    - name: Provide auto_home.sh
+      ansible.builtin.copy:
+        src: auto_home.sh
+        dest: /etc/auto_home.sh
+        owner: root
+        mode: '755'
+        

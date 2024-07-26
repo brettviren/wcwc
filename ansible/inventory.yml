@@ -5,7 +5,7 @@ workstations:
     heracles.phy.bnl.gov:
     aswork.phy.bnl.gov:
   vars:
-    wcwc_nfs_server: lycastus.phy.bnl.gov
+    ansible_remote_user: root
 
 # systems providing some service
 servers:

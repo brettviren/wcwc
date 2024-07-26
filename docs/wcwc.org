@@ -16,34 +16,37 @@
 :CUSTOM_ID: intro
 :END:
 
-This document describes the Wire-Cell workstation cluster (WCWC).  Sections [[#enroll]], [[#base]] and [[#stacks]] are intended to provide easy entry points to WCWC users (including using WCWC for software development). Section [[#spack]] gives a summary of information about Spack that is most salient to users of WCWC and developers of WCWC infrastructure.  Section [[#further]] provides guidance on optional ways to use WCWC.  The section [[#nab]] gives details on various parts of how WCWC is constructed and works.  And finally the section [[#sysadmin]] describes use of Ansible to do OS-level sysadmin things for computers enrolled in a WCWC.
+This document describes the Wire-Cell workstation cluster (WCWC).  Sections [[#enroll]], [[#base]] and [[#stacks]] are intended to provide easy entry points to WCWC users (including using WCWC for software development). Section [[#spack]] gives a summary of information about Spack that is most salient to users of WCWC and developers of WCWC infrastructure.  Section [[#further]] provides guidance on optional ways to use WCWC.  The section [[#sysadmin]] describes use of Ansible and FreeIPA IDM to do OS-level sysadmin things for computers enrolled in a WCWC.  And finally the section [[#nabs]] gives details useful for implanting variants of WCWC.
 
 This document, various tools and configuration are provided by the [[https://github.com/brettviren/wcwc][wcwc]] package.
 It provides a program called ~wcwc~ that automates various user and administration tasks.  It including [[https://docs.ansible.com/][Ansible]] recipes for OS level administration (see section [[#ansible]]).  The recommended way to use tools from this package is with a direnv activated shell.  See [[#direnv]].
-
 
 * Workstation enrollment
 :PROPERTIES:
 :CUSTOM_ID: enroll
 :END:
 
-As described here, WCWC instance resides on the BNL campus network.  It is comprised of a subset of the workstations used by the BNL Wire-Cell team.  To enroll a workstation into WCWC the owner must satisfy these requirements:
+As described here, WCWC instance resides on the BNL campus network.  It is comprised of a subset of the workstations used by the BNL Wire-Cell team.  To fully enroll a workstation into WCWC the owner must satisfy these requirements:
 
 - Be a custodian or otherwise primary user of a workstation on the BNL campus network.
 - Install a supported OS (currently Debian 12 / "bookworm").
 - Request a static IP from BNL DNS admins and configure the OS to use it.
 - Add the [[https://www.phy.bnl.gov/~bviren/wire-cell/docs/wcwc.pub][BNL WCWC admin SSH public]] keys to ~/root/.ssh/authorized_keys~.
+- Convert the local user accounts so they have unique user IDs, change their files' permissions to match and to place their ~$HOME~ under a standard location (~/nfs/home/$USER~). 
 - Notify the WCWC admin for further OS configuration and discuss any special needs.
 
-A workstation may then be integrated into a WCWC in a variety of ways.  One main outcome is that the directory
-#+begin_example
-/wcwc
-#+end_example
-becomes available.  This directory provides all WCWC software.
+
+The WCWC admin can help with these items is needed.  The WCWC admin will then install various OS packages and perform OS configuration and integration into the WCWC.  
 
 #+begin_note
 People are encouraged to make use of WCWC in other clusters and are free to apply their own structure.  A single user on a laptop can benefit from becoming its own WCWC.  Guidance on alternative WCWC structures is given in the section [[#further]]
 #+end_note
+
+The main features gained from the enrollment are:
+
+- Access to ~/wcwc~ holding a large set of software builds of various stacks.
+- Ability for the workstation owner to log into other WCWC workstations and have a shared ~$HOME~.
+- Likewise, ability for other WCWC members to log into the workstation to make use of its resources.
 
 * Base software stack
 :PROPERTIES:
@@ -612,9 +615,178 @@ $ cd my-work
 See the direnv documentation for all the useful tricks you can do in an ~.envrc~ file.  
 
 
+* Administration
+:PROPERTIES:
+:CUSTOM_ID: sysadmin
+:END:
+
+This section describes the steps to integrate a workstation into WCWC, repeating some from [[#enroll]].
+
+** Supported operating system
+
+A WCWC workstation must run a supported operating system in order to reduce the variety that the WCWC admin must cope with.   The single choice currently is Debian "stable".  This was chosen for several reasons:
+
+- Debian gives reasonably long life for each release.
+- Eventual upgrades can be done in-place.
+- Debian is well suited for scientific workstations due to its huge wealth of packages including those specific to scientific application (unlike eg RHEL based systems).
+
+The workstation owner is encouraged to install the Debian "stable" distribution on their own.  However, the WCWC admin can provide assistance.
+
+** Canonical primary user information
+
+To reduce some technical complexities, a WCWC user is required to have a unique user identifier (UID) that is used across all workstations in the WCWC.  If the user has (or had) a BNL "life" number, it should be used as the UID.  If a user has only a BNL guest ID then a UID is constructed from the guest ID.  These are of the form a letter followed by four numbers: LNNNN.  A UID should be formed as: [L - "A" + 1]0NNNN.  
+
+If the OS is newly installed, this UID convention can be followed when creating the account for the primary user.  In most cases, a potential WCWC workstation will already has a primary user with a nominal UID (usually 1000 or 1001).  To convert to the new user and group IDs run the following as root:
+
+#+begin_example
+  groupmod -g NEWGID GROUPNAME  
+  usermod  -g NEWGID -u NEWUID USERNAME
+#+end_example
+The ~usermod~ command will change permissions in the user's ~$HOME~ but not elsewhere.  To list top-level directories owned by the old user ID run:
+
+#+begin_example
+  find / -type d -user OLDUID -prune 2>/dev/null
+#+end_example
+One may then change ownership for each directory listed.
+#+begin_example
+  chown --from=CURRENT_OWNER:CURRENT_GROUP -R NEW_OWNER:NEW_GROUP DIRECTORY
+#+end_example
+
+This must be performed for the primary user and any other local users that will be members of WCWC.  By "local user" we mean the user local to the workstation that physically provides that user's ~$HOME~.
+
+** Enrollment into Physics IDM
+
+The BNL physics department maintains an identity management system (IDM) based on FreeIPA.  It is used in the BNL WCWC to manage user accounts and NFS automounting.  The enrollment is partly manual and partly automated.
+
+*** Basic enrolement
+:PROPERTIES:
+:CUSTOM_ID: basic-idm-enroll
+:END:
+
+#+begin_example
+  # apt install freeipa-client
+  # hostname
+  # ipa-client-install \
+    --server=idm3.phy.bnl.gov \
+    --server=idm2.phy.bnl.gov \
+    --server=idm1.phy.bnl.gov \
+    --server=idm.phy.bnl.gov \
+    --domain=phy.bnl.gov
+  # ipa-client-automount --server=idm.phy.bnl.gov --location=wcwc-u
+#+end_example
+Make sure ~hostname~ returns a FQDN.  If not, set it with ~hostname~ and update ~/etc/hostname~ for after later reboots.  This requires the user/pass of a FreeIPA account that is authorized to enroll computers.
+
+The workstation host and all its local users then requires some settings in FreeIPA:
+
+*** Add the host
+
+1. ~Identity~ -> ~Hosts~ -> ~hostname.phy.bnl.gov~.
+2. Add primary owner's real name and other general info about the workstation in description and SAVE.
+3. In the ~Host Groups~ tab, ~+Add~, add the host to the group ~wcwc-workstations~.
+
+*** Add primary user
+
+A local user of the workstation will already have a Physics IDM account if they have a Physics SSH gateway account.   If they do not have an account they must request one from: https://www.phy.bnl.gov/Accounts/.
+
+#+begin_note
+The local and IDM user names must match.  If a mismatch occurs, either a new local or a new IDM account is needed or one of them must be renamed.
+#+end_note
+
+Given the ~username~ in FreeIPA:
+
+1. ~Identity~ -> ~Users~ -> ~username~
+2. ~User Groups~, ~+Add~ and add to ~wcwc~.
+   
+The ~$HOME~ provided by the workstation for a local user which is NFS-mounted to other WCWC workstations.  A map the combines ~workstation~ and ~username~ information is updated with:
+
+1. ~Network services~ -> ~Automount~ -> ~wcwc-u~ -> ~auto.u~ -> ~+Add~
+2. The ~Key~ is the username
+3. the ~Mount information~ is as follows, replacing ~WORKSTATION~ with the fully-qualified name of the workstation
+
+#+begin_example
+-fstype=nfs4 -sync,rw,soft,sec=sys,proto=tcp,port=2049 WORKSTATION:/home/&
+#+end_example
+
+Internally, FreeIPA assigns large user (and group) ID numbers while we wish to keep the BNL "life" number used at the OS level.  To allow this an "ID View" is needed for each user:
+
+1. ~Identity~ -> ~ID Views~ -> ~wcwc~ -> ~+Add~ 
+2. Fill in the user name and matching user login, desired UID matching GID, shell and home directory (~/home/USER~).
+3. SAVE
+
+*** One time setup
+
+The above assumes the following setup has been done.  First, the ~wcwc~ user group
+
+1. ~Identity~ -> ~Groups~ -> ~User Groups~ and make ~wcwc~
+2. Add any initially known users.
+
+The ~wcwc-workstations~ host group:
+
+1. ~Identity~ -> ~Groups~ -> ~Host Groups~ and make  ~wcwc-workstations~
+2. Add any initially known hosts
+
+Host-based access control (HBAC) brings users to hosts and ~wcwcws~ is the name:
+
+1. ~Policy~ -> ~HBAC~ -> ~+Add~ and make ~wcwcws~
+2. Visit ~wcwcws~,
+   - add the ~wcwc~ User Group,
+   - add the ~wcwc-workstations~ Host Group
+   - add HBAC services: (gdm, login and ssh).
+
+Automounting is handled as a network service "location"
+
+1. ~Network services~ -> ~Automount~ -> ~+Add~ and make ~wcwc-u~
+2. Visit ~wcwc-u~ and  ~+Add~ an ~auto.u~
+3. Click ~auto.master~ and +Add key with ~/u~ and ~auto.u~.
+See above for entries that go in ~auto.u~.
+
+ID views allow remapping UID and other things.
+1. ~Identity~ -> ~ID Views~ -> ~+Add~ and make ~wcwc~
+Add ID View entries as described above.
+
+
+** Ansible setup
+:PROPERTIES:
+:CUSTOM_ID: ansible-setup
+:END:
+
+See [[https://docs.ansible.com/][Ansible docs]] for details on Ansible.  Here we give the highlights.  We refer to ~admin~ as a user on an Ansible [[https://docs.ansible.com/ansible/latest/getting_started/][control node]].  It is ~admin~ that runs Ansible commands and must be able to login as user ~root~ to every target machine via keys.
+
+*** Inventory
+
+Add hosts to ~wcwc/ansible/inventory.yml~
+#+begin_example
+workstations:
+  hosts:
+    hierocles.phy.bnl.gov:
+    heracles.phy.bnl.gov:
+    aswork.phy.bnl.gov:
+    # ....
+#+end_example
+The host name should be given fully qualified.
+
+Then check inventory and connectivity:
+#+begin_example
+ansible-inventory --list
+ansible-inventory --host hierocles.bnl
+ansible workstations -m ping -l hierocles.phy.bnl.gov
+#+end_example
+All commands should succeed.
+
+*** Running a play
+
+An ansible "playbook" applies OS configurations.  If meek, one may limit the play to a newly added workstation with ~-l hostname~.  The main play for workstations can be run as:
+#+begin_example
+  $ cd wcwc/
+  $ ansible-playbook -l 'heracles.phy.bnl.gov' ansible/playbooks/wcwc-workstation.yml 
+#+end_example
+
+
+
+
 * Nuts and bolts
 :PROPERTIES:
-:CUSTOM_ID: nab
+:CUSTOM_ID: nabs
 :END:
 
 This section is not intended for "normal" users but expert users, WCWC administrators or just anyone that wants to understand how WCWC works in more detail.
@@ -801,35 +973,3 @@ $ wcwc spack install --stack wirecell wire-cell-toolkit
 
 TBD.
 
-* Sysadmin
-:PROPERTIES:
-:CUSTOM_ID: sysadmin
-:END:
-
-
-The OS level of WCWC workstations is managed by Ansible using recipes provided by the ~wcwc~ package.  See section [[#direnv-wcwc]] for the recommended way to use this package.  It assumes [[https://docs.ansible.com/ansible/latest/reference_appendices/config.html][Ansible-related environment]] as defined in ~wcwc/.envrc~.
-
-** Ansible setup
-:PROPERTIES:
-:CUSTOM_ID: ansible-setup
-:END:
-
-See [[https://docs.ansible.com/][Ansible docs]] for details on Ansible.  Here we give the highlights.  We refer to ~admin~ as a user on an Ansible [[https://docs.ansible.com/ansible/latest/getting_started/][control node]].  It is ~admin~ that runs Ansible commands.
-
-The configuration starts with a list of hosts (~wcwc/ansible/inventory.cfg~)
-#+begin_example
-  [workstations]
-  hierocles.bnl
-  # etc ...
-#+end_example
-Hostnames are fully qualified but are intended to match stanzas in an SSH configuration file and not necessarily DNS entries.  After adding a new host, check basic SSH connectivity allows login with no interruption for authentication (ie, ~ssh-agent~ key management is working).
-#+begin_example
-ssh root@hierocles.bnl
-#+end_example
-Then check Ansible configuration
-#+begin_example
-ansible-inventory --list
-ansible-inventory --host hierocles.bnl
-ansible workstations -m ping -l hierocles.bnl
-#+end_example
-All commands should succeed.
