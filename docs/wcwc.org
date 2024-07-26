@@ -747,7 +747,7 @@ Add ID View entries as described above.
 
 ** Ansible setup
 :PROPERTIES:
-:CUSTOM_ID: ansible-setup
+:CUSTOM_ID: ansible
 :END:
 
 See [[https://docs.ansible.com/][Ansible docs]] for details on Ansible.  Here we give the highlights.  We refer to ~admin~ as a user on an Ansible [[https://docs.ansible.com/ansible/latest/getting_started/][control node]].  It is ~admin~ that runs Ansible commands and must be able to login as user ~root~ to every target machine via keys.
