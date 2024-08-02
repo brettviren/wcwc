@@ -16,37 +16,41 @@
 :CUSTOM_ID: intro
 :END:
 
-This document describes the Wire-Cell workstation cluster (WCWC).  Sections [[#enroll]], [[#base]] and [[#stacks]] are intended to provide easy entry points to WCWC users (including using WCWC for software development). Section [[#spack]] gives a summary of information about Spack that is most salient to users of WCWC and developers of WCWC infrastructure.  Section [[#further]] provides guidance on optional ways to use WCWC.  The section [[#sysadmin]] describes use of Ansible and FreeIPA IDM to do OS-level sysadmin things for computers enrolled in a WCWC.  And finally the section [[#nabs]] gives details useful for implanting variants of WCWC.
+This document describes the Wire-Cell workstation cluster (WCWC).  A WCWC organizes a pool of workstations, installed software and various tasks in order to reduce and share effort between a group of users/developers.  As the name may imply, the WCWC was initially developed to support Wire-Cell related things and, indeed, it has Wire-Cell specific functionality.  But a WCWC can, in fact, be used for more general purposes.  In a WCWC the software is provided through Spack which supports installing from a vast set of packages.
+
+Sections [[#enroll]], [[#base]] and [[#stacks]] are intended to provide easy entry points to WCWC users (including using WCWC for software development). Section [[#spack]] gives a summary of information about Spack that is most salient to users of WCWC and developers of WCWC infrastructure.  Section [[#further]] provides guidance on optional ways to use WCWC.  The section [[#sysadmin]] describes use of Ansible and FreeIPA IDM to do OS-level sysadmin things for computers enrolled in BNL's WCWC and which WCWCs at other institutions may use as guidance for their own configurations.  And finally the section [[#nabs]] gives additional details useful for implementing your own WCWC including one running on your own laptop.
 
 This document, various tools and configuration are provided by the [[https://github.com/brettviren/wcwc][wcwc]] package.
-It provides a program called ~wcwc~ that automates various user and administration tasks.  It including [[https://docs.ansible.com/][Ansible]] recipes for OS level administration (see section [[#ansible]]).  The recommended way to use tools from this package is with a direnv activated shell.  See [[#direnv]].
+It provides a program called ~wcwc~ that automates various user and administration tasks.  It also includes [[https://docs.ansible.com/][Ansible]] recipes that may be used for OS-level administration (see section [[#ansible]]).  
+
+Here we will use the term "primary" to indicate a user account on the single workstation that they "own" and which provides the user's physical ~$HOME~ directory.  We describe an non-primary account as "secondary".  A secondary account is simply one used by a user on a WCWC workstation that does not directly provide their physical ~$HOME~ disk.  Any account on a workstation outside of the WCWC is called "external".  An external account may be on a workstation the same LAN as the WCWC or be separated from the WCWC workstation LAN via a firewall.  When a workstation is called "local" it refers to the machine at which a user is physically sitting while a workstation is considered "remote" from the user when it is otherwise accessed.
 
 * Workstation enrollment
 :PROPERTIES:
 :CUSTOM_ID: enroll
 :END:
 
-As described here, WCWC instance resides on the BNL campus network.  It is comprised of a subset of the workstations used by the BNL Wire-Cell team.  To fully enroll a workstation into WCWC the owner must satisfy these requirements:
-
-- Be a custodian or otherwise primary user of a workstation on the BNL campus network.
-- Install a supported OS (currently Debian 12 / "bookworm").
-- Request a static IP from BNL DNS admins and configure the OS to use it.
-- Add the [[https://www.phy.bnl.gov/~bviren/wire-cell/docs/wcwc.pub][BNL WCWC admin SSH public]] keys to ~/root/.ssh/authorized_keys~.
-- Convert the local user accounts so they have unique user IDs, change their files' permissions to match and to place their ~$HOME~ under a standard location (~/nfs/home/$USER~). 
-- Notify the WCWC admin for further OS configuration and discuss any special needs.
-
-
-The WCWC admin can help with these items is needed.  The WCWC admin will then install various OS packages and perform OS configuration and integration into the WCWC.  
-
-#+begin_note
-People are encouraged to make use of WCWC in other clusters and are free to apply their own structure.  A single user on a laptop can benefit from becoming its own WCWC.  Guidance on alternative WCWC structures is given in the section [[#further]]
-#+end_note
-
 The main features gained from the enrollment are:
 
 - Access to ~/wcwc~ holding a large set of software builds of various stacks.
 - Ability for the workstation owner to log into other WCWC workstations and have a shared ~$HOME~.
 - Likewise, ability for other WCWC members to log into the workstation to make use of its resources.
+
+#+begin_note
+We assume here the WCWC instance that resides on the BNL campus network.  Other WCWCs may be constructed differently.  
+People are encouraged to make use of WCWC in other clusters and are free to apply their own structure.  A single user on a laptop can benefit from becoming its own WCWC.  Guidance on alternative WCWC structures is given in the section [[#further]]
+#+end_note
+
+The BNL WCWC is initially comprised of a subset of the workstations used by the BNL Wire-Cell team.  To enroll a workstation into WCWC the owner follow these requirements and steps:
+
+- Be a custodian or otherwise primary user of a workstation on the BNL campus network.
+- Install a supported OS (currently Debian 12 / "bookworm").
+- Request a static IP from BNL DNS admins and configure the OS to use it.
+- Add the [[https://www.phy.bnl.gov/~bviren/wire-cell/docs/wcwc.pub][BNL WCWC admin SSH public]] keys to ~/root/.ssh/authorized_keys~.
+- Assure all user IDs, file permissions and ~$HOME~ locations are as expected by WCWC. (see sections [[#user-ids]] and [[#home-dirs]])
+- Notify the WCWC admin for further OS configuration and discuss any special needs 
+The workstation owner may request the WCWC admin to help with these items.  After these enrollment tasks are complete, the WCWC admin will install various OS packages and perform OS configuration to complete the integration into the WCWC.
+
 
 * Base software stack
 :PROPERTIES:
@@ -61,6 +65,10 @@ The WCWC software is built with the ~spack~ command from the [[https://spack.io/
 For new users, take note that the subsequent section [[#stacks]] repeats the examples from this section in forms modified to make use of "extended software stacks" that provide additional packages such as those relevant to Wire-Cell.
 
 ** Spack shell environment
+:PROPERTIES:
+:CUSTOM_ID: spack-shell
+:END:
+
 
 The examples will rely on some initial shell environment configuring.
 Discover and load a shell environment script appropriate for your shell:
@@ -502,14 +510,105 @@ Shared environments can be useful for end users but their *view* directory is no
 
 A Spack Environment can be used to provide a basis for software development as its *view* directory, ie  ~$SPACK_ENV/.spack-env/view~, acts similarly to the traditional Unix ~/usr~ or ~/usr/local~ prefix.  To build a software package under development you may provide this prefix or in many cases rely on packages to be found via ~PKG_CONFIG_PATH~ and ~CMAKE_PREFIX_PATH~ that are set by the Spack Environment activation. 
 
+** Access
+:PROPERTIES:
+:CUSTOM_ID: logging-in
+:END:
+
+WCWC users may access WCWC workstations in a number of ways.
+
+*** Local workstation access
+
+*Primary local access* is when you log in to your own workstation through its "console" (be it the GDM or other display manager or to the TTY).  Access requires password authentication and it is performed by the local system and does not utilize IDM (see section [[#freeipa]]).   
+
+*Secondary local access* is when you log in to the "console" of another workstation on which your user is not primary.  This access requires you to supply a password that is authenticated by IDM.
+This mode is not expected to be commonly exercised.  Contact the WCWC admin about accommodating it.
+
+To reduce password proliferation, BNL WCWC may coalesce these two types of access in the future by using only IDM password authentication for any type of local access.
+
+*** Intra-WCWC remote access
+:PROPERTIES:
+:CUSTOM_ID: intra-ssh
+:END:
+
+
+You may access other WCWC workstations from your own WCWC workstation via SSH authenticated with keys.  Here describes one way to achieve this but users are free to pursue other preferred methods.  First, on a WCWC workstation, if you do not yet have =~/.ssh/id_rsa.pub= or other SSH key, make one:
+
+#+begin_example
+$ ssh-keygen
+Generating public/private rsa key pair.
+Enter file in which to save the key (/home/user/.ssh/id_rsa): 
+Enter passphrase (empty for no passphrase): 
+Enter same passphrase again: 
+Your identification has been saved in /home/user/.ssh/id_rsa
+Your public key has been saved in /home/user/.ssh/id_rsa.pub
+#+end_example
+Per BNL, requirements you *must* provide a passphrase.  Do *not* leave it empty.
+
+You may authorize yourself to log in other WCWC workstations (or any that NFS-mount your ~$HOME~) by appending your *public* key file contents as:
+#+begin_example
+$ cat ~/.ssh/id_rsa.pub >> ~/.ssh/authorized_keys
+#+end_example
+
+*** External remote access
+:PROPERTIES:
+:CUSTOM_ID: external-ssh
+:END:
+
+
+You may access WCWC workstations from an external computer such as a non-WCWC computer on the WCWC lan or one on a network separated from the WCWC LAN by a firewall.  In this latter case, access to an SSH "gateway" account may be required prior to continuing on to a WCWC account.   Contact your WCWC admin for details on how to acquire such an account.  To make the hop through the gateway transparent you may edit your local =~/.ssh/config= to include a stanza like:
+
+#+begin_example
+Host mywcwc
+     ControlMaster auto
+     ControlPath ~/.ssh/%r@%h:%p
+     ControlPersist 10m
+     ForwardAgent yes
+     ForwardX11 yes
+     HostKeyAlias mywcwc
+     Hostname mywcwc.phy.bnl.gov
+     PreferredAuthentications publickey
+     ProxyCommand ssh -A -Y -X myuser@physsh.phy.bnl.gov -W %h:%p
+     ServerAliveInterval 60
+     ServerAliveCountMax 120
+     User myuser 
+#+end_example
+Here, we assume a user account ~myuser~ on BNL WCWC and BNL Physics department SSH gateway and a WCWC workstation ~mywcwc~.
+The *local* SSH public key (ie, the one on your *local, external* computer) must be entered into the IDM by the WCWC admin.
+
+After this external remote access provides you a shell on a WCWC workstation you may wish to further continue your SSH connection to another WCWC workstation.  This requires your *remote* SSH key (ie, one made by your WCWC account) to be authorized as described in section [[#intra-ssh]].  Alternatively, you may find it more convenient to rely on an ~ssh-agent~ to forward your external key that you used to access the SSH gateway to each leg of your SSH connection chain.  To do that, starting on your *local, external* computer,
+#+begin_example
+$ ssh-add
+#+end_example
+Type your passphrase.  Again, a passphrase is *required*.  If your key do not have a passphrase, *immediately* add one (and remember it):
+#+begin_example
+$ ssh-keygen -p
+#+end_example
+Using =~/.ssh/config= as above, you may now SSH as normal
+#+begin_example
+$ ssh mywcwc
+$ ssh otherwcwc
+#+end_example
+Or, take each step manually and instruct SSH to forward the agent with ~-A~:
+#+begin_example
+$ ssh -A myuser@physsh.phy.bnl.gov
+$ ssh -A mywcwc
+$ ssh otherwcwc
+#+end_example
+
+
+
 ** Spack views
 :PROPERTIES:
 :CUSTOM_ID: view
 :END:
 
-The kernel of a Spack Environment is a Spack View.  A view aggregates package instances via the file system to that they appear to be installed in a single ~/usr/local~-style tree.  Some reasons you may prefer a View over an Environment is for their simplicity, to put more control (and responsibility) into your hands or to avoid global modification to your shell environment.  Using a Spack View is also limiting.  While you will be able to "add" existing package instances to a view (and that's about all you can do) you will not be able to ~spack install~ novel packages into the view.  A *view* also has no Spack *scope* and so no way to override ~spack~ configuration. Of course, you can create your own scope but that step quickly takes you back to the pattern followed by Spack Environment and you are likely best off using that.
+In section [[#spack-env]] a Spack Environment was introduced as a way to make a durable user environment and in section [[#spack-devenv]] a Spack Environment is used for development.  The kernel of a Spack Environment is a Spack View and it can be used directly to provide a "light-weight" form environment that gives more control to the user/developer.
 
-No spack shell environment modifications are required to create and use views but you will need to run the ~spack~ program directly.  You make a view by adding package instances:
+A view aggregates package instances via the file system to that they appear to be installed in a single ~/usr/local~-style tree.  Some reasons you may prefer a View over an Environment is for their simplicity, to put more control (and responsibility) into your hands or to avoid global modification to your shell environment.  Using a Spack View is also limiting.  While you will be able to "add" existing package instances to a view (and that's about all you can do) you will not be able to ~spack install~ novel packages into the view.  A *view* also has no Spack *scope* and so no way to override ~spack~ configuration. Of course, you can create your own scope but that step quickly takes you back to the pattern followed by Spack Environment and you are likely best off using that.
+
+There are no requirements to modify your shell environment to create and use views.  You may even avoid basic shell environment (section [[#spack-shell]]) at the expense of using the full path to the ~spack~ program.
+You make a view by adding package instances:
 
 #+begin_example
 $ /wcwc/spack/base/repo/bin/spack \
@@ -541,37 +640,15 @@ lrwxrwxrwx 1 bv bv 129 Jul 10 15:24 my-view/lib/libspdlog.so -> /wcwc/spack/base
 :CUSTOM_ID: direnv
 :END:
 
-The [[https://direnv.net/][direnv]] program provides features similar to a Spack Environment.  See its very excellent documentation to learn how to configure your shell to utilize it.
-
-*** Use the ~wcwc~ package with direnv
-:PROPERTIES:
-:CUSTOM_ID: direnv-wcwc
-:END:
-
-The ~wcwc~ package provides the ~wcwc~ command and Ansible recipes.  Both rely on OS level packages.  Additional environment setting is provided to direnv-enabled shells with the included ~wcwc/.envrc~ file.
-
- is from a direnv shell.  Initial installation is as follows:
-#+begin_example
-git clone git@github.com:brettviren/wcwc.git
-cd wcwc
-direnv allow
-
-wcwc --help
-#+end_example
-Subsequent use requires merely
-#+begin_example
-cd wcwc
-#+end_example
-
+A Spack View does not require any special shell environment, nevertheless one often benefits from packing some information into the environment.  This can be done with a Spack Environment (section [[#spack-env]]) while [[https://direnv.net/][direnv]] provides an alternative that keeps much of the automation of a Spack Environment but gives the user, especially a developer, more control.  Unlike a Spack Environment, ~direnv~ ties the application of shell environment settings to a directory.  One ~cd~'s into a ~direnv~ controlled directory and the shell is automatically configured.  When one ~cd~'s out, the configuration is removed.
+See direnv's excellent documentation for more information and below are some examples applicable to WCWC.
 
 *** Develop with direnv
 :PROPERTIES:
 :CUSTOM_ID: direnv-dev
 :END:
 
-Direnv can be used to provide functionality similar to a Spack Environment and can even exploit the existence of one.  However, it offers alternative behavior in how shell environment is configured.  Instead of issuing explicit ~spack env activate~ and ~spack env deactivate~ commands, use of ~direnv~ allows the user to simply ~cd~ into a direnv-controlled directory tree.  Once the user changes out of this tree the configuration settings are automatically undone.
-
-A view tree, be it bare as in section [[#view]] or part of a Spack Environment, can be easily used from a direnv ~.envrc~ file.  This is particularly useful pattern it to place a view one level under where ~.envrc~ resides:
+A view tree, be it bare as in section [[#view]] or part of a Spack Environment, can be easily used from a direnv ~.envrc~ file.  A particularly useful pattern is to place a view one level under where ~.envrc~ resides to give room for source, build trees, etc.
 #+begin_example
 $ /wcwc/spack/base/repo/bin/spack \
   --config-scope=/wcwc/spack/wirecell/scope \
@@ -599,7 +676,7 @@ $ ./wcb configure --prefix=$DIRENV_DIR/view
 $ ./wcb
 $ ./wcb install
 #+end_example
-Likely you will wish to further control ~wcb~ with some number of ~--with-*~ flags.  This uses a trick to install the build products right into the view.  This makes a view a mix of symlinks and real files, but it works just fine.  You may elide the ~wcb install~ and run the build products in-place by adding some more lines to ~.envrc~ like:
+Likely you will wish to further control ~wcb~ with some number of ~--with-*~ flags.  This uses a trick to install the build products right into the view.  This makes a view a mix of symlinks and real files, but it works just fine.  It is also useful to elide the ~wcb install~ and run the build products in-place under ~build/~ by adding some more lines to ~.envrc~ like:
 
 #+begin_example
 export BATS_LIB_PATH=$PWD/toolkit/test
@@ -614,13 +691,35 @@ $ cd my-work
 #+end_example
 See the direnv documentation for all the useful tricks you can do in an ~.envrc~ file.  
 
+*** The ~wcwc~ package with direnv
+:PROPERTIES:
+:CUSTOM_ID: direnv-wcwc
+:END:
+
+The ~wcwc~ package provides the ~wcwc~ command and Ansible recipes.  Both rely on OS level packages.  Additional environment setting is provided to direnv-enabled shells with the included ~wcwc/.envrc~ file.
+
+ is from a direnv shell.  Initial installation is as follows:
+#+begin_example
+git clone git@github.com:brettviren/wcwc.git
+cd wcwc
+direnv allow
+
+wcwc --help
+#+end_example
+Subsequent use requires merely
+#+begin_example
+cd wcwc
+#+end_example
+
+
+
 
 * Administration
 :PROPERTIES:
 :CUSTOM_ID: sysadmin
 :END:
 
-This section describes the steps to integrate a workstation into WCWC, repeating some from [[#enroll]].
+This section describes the steps to integrate a workstation into WCWC, elaborating on section [[#enroll]].
 
 ** Supported operating system
 
@@ -633,6 +732,10 @@ A WCWC workstation must run a supported operating system in order to reduce the 
 The workstation owner is encouraged to install the Debian "stable" distribution on their own.  However, the WCWC admin can provide assistance.
 
 ** Canonical primary user information
+:PROPERTIES:
+:CUSTOM_ID: user-ids
+:END:
+
 
 To reduce some technical complexities, a WCWC user is required to have a unique user identifier (UID) that is used across all workstations in the WCWC.  If the user has (or had) a BNL "life" number, it should be used as the UID.  If a user has only a BNL guest ID then a UID is constructed from the guest ID.  These are of the form a letter followed by four numbers: LNNNN.  A UID should be formed as: [L - "A" + 1]0NNNN.  
 
@@ -653,14 +756,16 @@ One may then change ownership for each directory listed.
 #+end_example
 
 This must be performed for the primary user and any other local users that will be members of WCWC.  By "local user" we mean the user local to the workstation that physically provides that user's ~$HOME~.
-
-** Enrollment into Physics IDM
-
-The BNL physics department maintains an identity management system (IDM) based on FreeIPA.  It is used in the BNL WCWC to manage user accounts and NFS automounting.  The enrollment is partly manual and partly automated.
-
-*** Basic enrolement
+** Physics IDM
 :PROPERTIES:
-:CUSTOM_ID: basic-idm-enroll
+:CUSTOM_ID: freeipa
+:END:
+
+The BNL physics department maintains an identity management system (IDM) based on FreeIPA.  It is used in the BNL WCWC to manage user accounts and NFS automounting.  The enrollment is partly manual and partly automated and handled by the WCWC admin.
+
+*** Basic enrollment
+:PROPERTIES:
+:CUSTOM_ID: freeipa-enroll
 :END:
 
 #+begin_example
@@ -679,12 +784,19 @@ Make sure ~hostname~ returns a FQDN.  If not, set it with ~hostname~ and update 
 The workstation host and all its local users then requires some settings in FreeIPA:
 
 *** Add the host
+:PROPERTIES:
+:CUSTOM_ID: freeipa-add-host
+:END:
+
 
 1. ~Identity~ -> ~Hosts~ -> ~hostname.phy.bnl.gov~.
 2. Add primary owner's real name and other general info about the workstation in description and SAVE.
 3. In the ~Host Groups~ tab, ~+Add~, add the host to the group ~wcwc-workstations~.
 
 *** Add primary user
+:PROPERTIES:
+:CUSTOM_ID: freeipa-add-user
+:END:
 
 A local user of the workstation will already have a Physics IDM account if they have a Physics SSH gateway account.   If they do not have an account they must request one from: https://www.phy.bnl.gov/Accounts/.
 
@@ -712,15 +824,19 @@ Internally, FreeIPA assigns large user (and group) ID numbers while we wish to k
 1. ~Identity~ -> ~ID Views~ -> ~wcwc~ -> ~+Add~ 
 2. Fill in the user name and matching user login, desired UID matching GID, shell and home directory (~/home/USER~).
 3. SAVE
+See sections [[#user-ids]] and [[#home-dirs]] for more info on user IDs and home directories.  
 
 *** One time setup
+:PROPERTIES:
+:CUSTOM_ID: freeipa-one-time
+:END:
 
-The above assumes the following setup has been done.  First, the ~wcwc~ user group
+The above assumes a one-time setup has been done as described in this section.  First, make the ~wcwc~ user group:
 
 1. ~Identity~ -> ~Groups~ -> ~User Groups~ and make ~wcwc~
 2. Add any initially known users.
 
-The ~wcwc-workstations~ host group:
+Then, the ~wcwc-workstations~ host group:
 
 1. ~Identity~ -> ~Groups~ -> ~Host Groups~ and make  ~wcwc-workstations~
 2. Add any initially known hosts
@@ -743,6 +859,21 @@ See above for entries that go in ~auto.u~.
 ID views allow remapping UID and other things.
 1. ~Identity~ -> ~ID Views~ -> ~+Add~ and make ~wcwc~
 Add ID View entries as described above.
+
+*** Home directories
+:PROPERTIES:
+:CUSTOM_ID: home-dirs
+:END:
+
+WCWC relies on ~autofs~ to automount user ~$HOME~ (and ~/wcwc~) directories.  ~$HOME~ will be NFS-mounted on all WCWC workstations except for the single workstation on which the user is a "primary" user (ie, the workstation that provides the user's home disk) where it will be a direct (or bind) mount.  In order to handle this heterogeneous mounting pattern given ~autofs~ restrictions several bits of information must be combined on a per-workstation basis:
+
+- The directory ~/nfs/home/$USER~ exists only on a workstation where a user is a "primary" (ie, that workstation provides the user's physical home directory).  It should be made permanent in ~fstab~ and NFS-exported as ~/home/$USER~.
+- The set of pairs of NFS server name and ~/home/$USER~ are maintained in an ~autofs~ map in IDM.
+- The ~autofs~ on every workstation (even where a user is primary) mounts ~/u/$USER~.
+- An ~autofs~ "program" (shell script) type map is used for ~/home~.  It dynamically resolves a ~$USER~ to ~/nfs/home/$USER~ if that path exists, else it resolves ~/u/$USER~.
+
+
+
 
 
 ** Ansible setup
@@ -775,7 +906,7 @@ All commands should succeed.
 
 *** Running a play
 
-An ansible "playbook" applies OS configurations.  If meek, one may limit the play to a newly added workstation with ~-l hostname~.  The main play for workstations can be run as:
+An ansible "playbook" applies OS configurations.  One may limit the play to just a newly added workstation with ~-l hostname~.  The main play for workstations can be run as:
 #+begin_example
   $ cd wcwc/
   $ ansible-playbook -l 'heracles.phy.bnl.gov' ansible/playbooks/wcwc-workstation.yml 
@@ -789,7 +920,7 @@ An ansible "playbook" applies OS configurations.  If meek, one may limit the pla
 :CUSTOM_ID: nabs
 :END:
 
-This section is not intended for "normal" users but expert users, WCWC administrators or just anyone that wants to understand how WCWC works in more detail.
+This section is not intended for "normal" users but for "expert" users, WCWC administrators or just anyone that wants to understand how WCWC works in more detail.
 
 ** Ways to get the software
 
@@ -800,7 +931,7 @@ This section gives details on how workstations may be configured to get the ~/wc
 :CUSTOM_ID: nfs-client
 :END:
 
-Most WCWC workstations will access the WCWC software under ~/wcwc~ via an NFS-mount.  This requires the workstation to share connectivity with an NFS-server providing this volume.  Typically this means the two computers must share a common LAN.
+WCWC workstations sharing a LAN are best provided software under ~/wcwc~ via an NFS-mount.  The NFS server may be an otherwise "normal" WCWC workstation or it may be held special.
 
 To configure a workstation as an NFS client for the BNL WCWC run this as root:
 #+begin_example
@@ -812,47 +943,27 @@ mount /wcwc
 #+end_example
 The ~lycastus~ host is relevant only on the BNL campus network.
 
-
 *** Copy client
 :PROPERTIES:
 :CUSTOM_ID: copy-client
 :END:
 
-A workstation can instead provide ~/wcwc~ by periodically synchronizing its files from some other workstation that has it as an NFS-mount.  This can be preferred for home workstation or laptop use.
+A workstation can instead provide ~/wcwc~ by periodically synchronizing this directory from some other workstation that provides the ~/wcwc~ directory.   This can be preferred for home workstation or laptop use as these generally may not mount remote NFS.
 
-A copy of ~/wcwc~ is fully "owned" by the user in this case and the user is free to use it as they wish.  However, it is recommended that the user *not* copy ~/wcwc~ so that it is owned by the normal user.  Instead, the ~/wcwc~ area should be managed by a special user.  This is to assure normal users can not write to the area and cause chaos.  As user ~root~, create the special user ~wcwc~ and make ~/wcwc~ with proper ownership:
+When a copy of ~/wcwc~ is made, it becomes fully "owned" by the user.   The user is free modify its contents as desired.  However, it is recommended that the user resist this temptation and create a special user dedicated to only performing the copy so that "normal" users can rely on ~/wcwc~ being safely read-only.  It is recommended to, as user ~root~, create the special user ~wcwc~ and make ~/wcwc~ with proper ownership:
 #+begin_example
 useradd -c 'Wire-Cell Workstation Cluster User' -d /home/wcwc -m -s /bin/bash wcwc
 mkdir /wcwc
 chown wcwc:wcwc /wcwc
 #+end_example
-You are free to copy files how you wish.  Use of ~rsync~ over ~ssh~ is recommended.  Configure the ~wcwc~ user's SSH config file like:
+You are free to copy files how you wish.  Use of ~rsync~ over ~ssh~ is recommended and the =~wcwc/.ssh/config= can be filled as described in section [[#external-ssh]] and the SSH keys of a "normal" can be used:
+
 #+begin_example
-mkdir .ssh
-chmod 700 .ssh
-cat << EOF >> ~/.ssh/config
-Host hierocles.bnl
-        ControlMaster auto
-        ControlPath ~/.ssh/socket-%r@%h:%p
-        ControlPersist 10m
-        ForwardAgent yes
-        ForwardX11 yes
-        HostKeyAlias hierocles
-        Hostname hierocles
-        PreferredAuthentications publickey
-        ProxyCommand ssh -A bviren@gateway.phy.bnl.gov -W %h:%p
-        ServerAliveInterval 60
-        User bviren
-EOF
-
-ssh hierocles.bnl
+wcwcuser$ ssh -A wcwc@localhost
+wcwc$ ssh-add -l
 #+end_example
-
-#+begin_note
-The example assumes a real BNL user (~bviren~) can SSH to a the ~wcwc~ account, forwarding an SSH key that allows access to a WCWC workstation (~hierocles~) via a BNL SSH gateway and that provides the ~/wcwc~ upstream mount.
-#+end_note
-
-Periodically run this ~rsync~ command to synchronize:
+With a loaded and forwarded agent, ~wcwc~ can access WCWC workstations using the keys of the original ~wcwcuser~ and 
+periodically run this ~rsync~ command to synchronize ~/wcwc~:
 #+begin_example
 $ rsync --del --archive hierocles.bnl:/wcwc/ /wcwc/
 #+end_example
@@ -898,6 +1009,7 @@ If a stack is unknown to ~wcwc~ it can be specified.  See ~wcwc install-stack --
 
 The result will be WCWC software area but currently with no actual packages installed.
 
+
 ** Ways to provide the software
 
 *** NFS Server
@@ -905,7 +1017,7 @@ The result will be WCWC software area but currently with no actual packages inst
 :CUSTOM_ID: nfs-server
 :END:
 
-The primary distribution mechanism for the ~/wcwc~ area is simple NFS.  
+The primary distribution mechanism for the ~/wcwc~ area to a LAN is simple NFS.  
 The following is needed to configure a WCWC workstation with this role:
 #+begin_example
 apt install nfs-kernel-server 
@@ -965,6 +1077,11 @@ To install to extended stack
 $ wcwc spack install --stack wirecell wire-cell-toolkit
 #+end_example
 
+*** Build and NFS on separate servers
+
+Nominally, Spack installs are performed on the NFS server where ~/wcwc~ is local and read-write.  That host may be under-powered. If a powerful host is available to perform package installation, but which should not be the NFS server, one may of course modify the NFS-export options described in section [[#nfs-server]] to allow read-write mount. Alternatively, one may ~rsync~ as described in section [[#copy-client]] but omit ~--del~ to first populate ~/wcwc~ on the powerful host, then perform a number of package installations, and finally ~rsync~ the changes back to the NFS server.  This mode will also benefit use of the software on the powerful host as local disk will be faster than NFS.
+
+
 *** Defining managed environments
 :PROPERTIES:
 :CUSTOM_ID: managed-env
@@ -973,3 +1090,6 @@ $ wcwc spack install --stack wirecell wire-cell-toolkit
 
 TBD.
 
+*** Containers
+
+TBD.

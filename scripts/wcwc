@@ -1,34 +1,19 @@
 #!/usr/bin/env python
 '''
-Manage and use elements of a Wire-Cell Workstation Cluster.
-
-It may take a configuration file given explicitly or defaulting to
-<prefix>/wcwc.cfg.  The file <prefix>/wcwc.cfg will be rewritten to reflect
-changes to the WCWC area under <prefix>/.
+Utility to create, manage and use elements of a Wire-Cell Workstation Cluster.
 '''
-
-default_repos = dict(
-    base=dict(url="https://github.com/spack/spack.git", tag="v0.22.1"),
-    wirecell=dict(url="https://github.com/WireCell/wire-cell-spack.git", tag="0.28.0.0", upstreams=["base"]),
-    nusoft=dict(url="https://github.com/NuSoftHEP/nusofthep-spack-recipes.git", upstreams=["base"]),
-    art=dict(url="https://github.com/FNALssi/fnal_art.git", upstreams=["nusoft"]),
-    larsoft=dict(url="https://github.com/LArSoft/larsoft-spack-recipes.git", upstreams=["art"]),
-    # dune, sbnd, ...
-)
-
-# These are lsb_release -ds lines from OSes that should work as WCWC members.
-# In principle, WCWC can work on many OSes.  To extend this list, the
-# "prepare-os" command would need extending and the typical Spack installations
-# used for WCWC applications would need testing.
-known_oses=("Debian GNU/Linux 12 (bookworm)",)
 
 
 import os
 import sys
 import json
 import yaml
+from datetime import datetime
 import click
 import shutil
+import sqlite3
+from socket import gethostname
+from getpass import getuser
 import graphlib
 import functools
 from pathlib import Path
@@ -45,6 +30,88 @@ error = log.error
 # Code may use parts of subprocess 
 from subprocess import STDOUT, PIPE, CalledProcessError
 
+
+# The name of the config file that will be read/written under <prefix>/
+wcwc_config_filename = "wcwc.yaml"
+
+# Default config object which may be overridden by a config file.
+#
+# The config largely consists of a description of a list of WCWC "stacks".
+# 
+# A WCWC "stack" consists of:
+# - A Spack "package repo" taken from a git repo at a particular tag/branch.
+# - The set of packages installed from the repo.
+# - A Spack "scope".
+# - A set of Spack Environments.
+#
+# A stack may depend on other stacks.  When a stack and dependency stack do not
+# share the same install_tree then the dependency is considered an "upstream"
+# Spack installation and will be "chained".  Otherwise, the dependency is
+# implicit.  A WCWC stack name is also a Spack namespace and thus separation of
+# stack packages can be achived using '{namespace}' in the projection.  Note,
+# when upstream chaining is used, all packages are installed into the stack's
+# install_tree even if they are provided by dependency repos.
+# 
+# Note, that the use of the Spack "builtin" repo is not implicit in wcwc
+# commands.  This allows a setup that elides the builtin repo entirely or one
+# that allows the builtin repo to be updated independently from the Spack
+# source.  That said, default configuration includes a "base" stack that
+# consists of the Spack "builtin" repo turned into a "stack" via symlink.  In
+# addition, as the user will inevitably issue bare "spack" commands and not set
+# the configuration scope to a stack scope, the various configurations relevant
+# to the builtin repo are set on the Spack instance.
+#
+# The configuration values may use WCWC and Spack variables.
+# WCWC variables include {prefix} and {stack} and all others are Spack's.
+default_config_yaml = '''
+defaults:
+  install_tree: "{prefix}/opt"
+  projection: "{namespace}/{architecture}/{compiler.name}-{compiler.version}/{name}-{version}-{hash}"
+  granularity: generic
+
+stack_defaults:
+  repo_path: "{prefix}/stacks/{stack}/repo"
+  scope_path: "{prefix}/stacks/{stack}/scope"
+  environments_path: "{prefix}/stacks/{stack}/environments"
+
+spack:
+  url: "https://github.com/spack/spack.git"
+  tag: "v0.22.1"
+  source_path: "{prefix}/spack"
+  scope_path: "{source_path}/etc/spack"
+
+stacks:
+  base:
+    source_path: "{prefix}/spack/var/spack/repos/builtin"
+    get: "link"  # or "copy" or "git", with url+tag instead of path
+
+  wirecell:
+    url: "https://github.com/WireCell/wire-cell-spack.git"
+    tag: "0.28.0.2"
+    depends:
+    - base
+
+  nusoft:
+    url: "https://github.com/NuSoftHEP/nusofthep-spack-recipes.git"
+    depends:
+    - base
+
+  art:
+    url: "https://github.com/FNALssi/fnal_art.git"
+    depends:
+    - nusoft
+
+  larsoft:
+    url: "https://github.com/LArSoft/larsoft-spack-recipes.git"
+    depends:
+    - art
+'''
+
+# A hard-wired list of OSes supported by this version of WCWC.
+# These are "spelled" as the output of "lsb_release -ds".
+known_oses=("Debian GNU/Linux 12 (bookworm)",)
+
+
 def run(cmd, lines=None, capture_error=True, *args, **opts):
     '''
     Apply default policy to subprocess.run()
@@ -55,6 +122,13 @@ def run(cmd, lines=None, capture_error=True, *args, **opts):
 
     If capture_error is true (default) then an error return code will lead to
     the stdout and stderr being logged prior to throwing.
+
+    capture_output option is True by default and is passed to subprocess.  Set
+    to False if you want stdout/stderr to not be captured.
+
+    check option is False by default and passed to subprocess.  Set to True to
+    make subprocess check the rc and maybe throw.  However, if capture_error is
+    True, subprocess will be told to not check and instead, we check locally.
     '''
     from subprocess import run as srun
     if isinstance(cmd, str):
@@ -65,7 +139,7 @@ def run(cmd, lines=None, capture_error=True, *args, **opts):
         opts["check"] = False
     debug(f'exec: {cmd} {args} {opts}')
     rc = srun(cmd, *args, **opts)  # throws
-    if capture_error and rc.returncode:
+    if lines is None and capture_error and rc.returncode:
         error(f'command failed: {cmd}')
         out = rc.stdout.decode() if rc.stdout else ""
         error(f'output:\n{out}')
@@ -73,7 +147,7 @@ def run(cmd, lines=None, capture_error=True, *args, **opts):
         error(f'error:\n{err}')
         rc.check_returncode()   # raise the exception
 
-    if not lines:
+    if lines is None:
         return rc
     return '\n'.join(rc.stdout.decode().strip().split("\n")[:lines])
 
@@ -97,6 +171,8 @@ def which(exe, def_cli=None, *def_args, **def_opts):
         raise FileNotFoundError(f'no such executable "{exe}"')
     
     def func(cli=None, *args, **opts):
+        nonlocal def_args
+        nonlocal def_opts
 
         parts = [[path], def_cli, cli]
         if any([isinstance(p,str) for p in parts]):
@@ -114,13 +190,131 @@ def which(exe, def_cli=None, *def_args, **def_opts):
                 if p: line += list(p)
 
         if not args: args = list()
-        args = def_args or list() + args
+        if not def_args: def_args = list()
+        args = def_args + args
 
         if not opts: opts = dict()
-        opts = def_opts or dict () | opts
+        if not def_opts: def_opts = dict()
+        opts = def_opts | opts
 
         return run(line, *args, **opts)
     return func
+
+def log_command(dbfile, cmd, t1, t2, rc, args=None, opts=None, envs=None):
+    '''
+    Log a command.
+
+    The command may be the name of an executable or a click command function.
+
+    t1/t2 are timestamps bracketing the command.
+    rc is return code.
+    args list of command arguments.
+    opts dict of any named command options.
+    envs dict of any environment configurations (shell, or program config).
+    '''
+
+    args = args or []
+    opts = opts or {}
+    envs = envs or {}
+
+    # dbfile = str(self.prefix / "wcwc.db")
+
+    db = sqlite3.connect(dbfile)
+    cur = db.cursor()
+
+    # https://sqldocs.org/sqlite/sqlite-json-data/
+    cur.execute('''CREATE TABLE IF NOT EXISTS commands(
+    id INTEGER PRIMARY KEY,
+    cmd TEXT,
+    t1 TIMESTAMP,
+    t2 TIMESTAMP,
+    rc INTEGER,
+    user TEXT,
+    host TEXT,
+    args JSON,
+    opts JSON,
+    envs JSON)''')
+    
+    if rc:
+        try:
+            rc = int(rc)
+        except TypeError:
+            rc = 1
+    else:
+        rc = 0
+
+    user = getuser()
+    host = gethostname()
+
+    cur.execute('''INSERT INTO
+    commands(cmd, t1, t2, rc, user, host, args, opts, envs)
+    VALUES (?,?,?,?,?,?,?,?,?)''', (cmd, t1, t2, rc, user, host,
+                                    json.dumps(args), json.dumps(opts), json.dumps(envs)))
+    db.commit()
+    log.debug(f'{cmd} ( {args}, {opts} )')
+
+
+def assure_git_repo(path, branch, url=None, ref=None, remote="origin"):
+    '''
+    Assure there is a git repo at given path on given branch.
+
+    A URL is required to clone.  If repo exists, URL is set as the given remote.
+
+    If branch needs creating, a ref must be provided.  It may be a commit hash,
+    a tag, a local or a remote branch.  If omitted, the value of "branch" is tried.
+    '''
+    path = Path(path)
+    git = which("git", cwd=path)
+
+    if path.exists():
+        if url:
+            git(f"remote set-url {remote} {url}")  # assure url
+        debug(f"git fetching in {path}")
+        git("fetch")
+    else:
+        if not url:
+            raise click.UsageError(f"must supply URL to clone repo to {path}")
+        debug(f"git cloning {url} to {path}")
+        git(f"clone -c feature.manyFiles=true {url} {path}", cwd=path.parent)
+
+    # reset git so we check for error
+    git = which("git", cwd=path, capture_error=False)
+
+    current_branch = git("rev-parse --abbrev-ref HEAD", lines=1)
+    debug(f'checking branch: {current_branch=} {branch=}')
+    if branch == current_branch:
+        debug(f"On branch {branch}, pulling")
+        git("pull")
+        return
+
+    # see if branch is local branch
+    rc = git(f'show-ref --verify --quiet refs/heads/{branch}')
+    if not rc.returncode:
+        debug(f"git switching to branch {branch}")
+        git(f'switch {branch}')
+        return
+
+    # go fishing
+    if not ref:
+        ref = branch
+    
+    # try ref as commit'ish (tag, hash, branch)
+    got = git(f'cat-file -t {ref}', lines=1)
+    if got == "commit":
+        debug(f"git checkout of local {ref} in {path}")
+        git(f'checkout -b {branch} {ref}')
+        return
+
+    # try ref as remote branch
+    got = git(f'cat-file -t {remote}/{ref}', lines=1)
+    if got == "commit":
+        debug(f"git checkout of remote {ref} in {path}")
+        git(f'checkout -b {branch} {ref}')
+        return
+    
+    raise click.UsageError(f"Can not assure branch {branch} in {path}")
+
+
 
 def merge_patch(target, patch):
     '''
@@ -155,59 +349,298 @@ def merge_dicts(dict1, dict2):
             dict1[k] = dict2[k]
     return dict1
 
+class SafeDict(dict):
+    def __missing__(self, key):
+        return '{' + key + '}'
+
+def format_lazy(string, **kwds):
+    '''
+    Format string on interpolants in kwds.
+
+    Any {...} interpolants not satisfied are kept.
+
+    The values of kwds may themselves have {...} interpolants and the formatting
+    proceeds until stability is reached.  
+
+    Note, some Spack variables are objects and attempting to lazy format things
+    like {compiler.name} fail as Python is trying to look for attribute "name"
+    on string "compiler" even before asking SafeDict for missing.
+    '''
+    while True:
+        try:
+            new = string.format_map(SafeDict(**kwds))
+        except AttributeError:
+            return string
+        if new == string:
+            return string
+        string = new
+
+class Object:
+    def __init__(self, prefix, cfg, defaults):
+        self.prefix = prefix
+        self._cfg = cfg or {}
+        self._def = defaults or {}       
+
+    @property
+    def cfg(self):
+        'Get full configuration dictionary'
+        return merge_patch(dict(self._cfg), self._def)
+
+    def keys(self):
+        return set(list(self._cfg.keys()) + list(self._def.keys()))
+
+    def setdefault(self, key, val):
+        '''
+        Set val on config if it is not already set.  Return val
+        '''
+        if key in self.keys():
+            return
+        self._cfg[key] = val
+        return val
+
+    def set(self, key, value):
+        '''
+        Set config value on key, return value.
+        '''
+        self._cfg[key] = value
+        return value        
+
+    def get(self, key, default=None):
+        '''
+        Get value at key or return default.
+
+        If value is type str it is interpolated against other config values.
+        '''
+        val = self.cfg.get(key, default)
+        if not isinstance(val, str):
+            return val
+        debug(f"Object.get {key=} {val=}")
+        return format_lazy(val, prefix=self.prefix, **self.cfg)
+
+
+    def assure_scope_config(self):
+        '''
+        Assure a configuration scope is configured for configuration object.
+        '''
+        config_dat = {
+            "build_stage": ['$user_cache_path/stage'],
+            "install_tree":  {
+                "root": self.get("install_tree"),  # must have
+                "projections": {
+                    "all": self.get("projection")  # must have
+                }
+            }
+        }
+        er = self.get("environments_path", None)
+        if er:
+            config_dat["environments_root"] = er
+        self.scope_config("config.yaml", dict(config=config_dat))
+
+        # overrides for concretizer.yaml
+        concretizer_dat = {
+            "targets": {
+                "granularity": self.get("granularity")  # must have
+            }
+        }
+        self.scope_config("concretizer.yaml", dict(concretizer=concretizer_dat))
+
+
+    def scope_config(self, fname, dat):
+        '''
+        Incorporate dat into scope config file fname.
+        '''
+
+        scope_path = Path(self.get("scope_path"))
+        path = scope_path / fname
+        if path.exists():
+            old_dat = yaml.safe_load(path.read_text())
+            dat = merge_patch(dat, old_dat)
+
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(yaml.dump(dat, sort_keys=False))
+        debug(f'wrote file: {path}')
+        
+
+class Stack(Object):
+    def __init__(self, name, prefix, cfg=None, **defaults):
+        '''
+        Create a model of a stack.
+
+        Defaults are configuration that is not changed but is patched into cfg.
+
+        Configuration values may have {prefix} or {stack} or Spack interpolants.
+        '''
+        super().__init__(prefix, cfg, defaults)
+        self.name = name
+        for kind in "repo scope environments".split():
+            self.setdefault(kind + '_path', "{prefix}/stacks/{stack}/"+kind)
+
+
+    @property
+    def deps(self):
+        'Return list of names of stacks on which this one depends'
+        return self.get("depends", [])
+
+    def path(self, kind):
+        '''
+        Return a path of a certain kind (repo, scope, environment, source)
+
+        These are configuration keys like "{kind}_path".  If not found, the
+        default value of "{prefix}/stacks/{stack}/{kind}" is used.
+
+        Any {prefix} and {stack} are resolved.  Other interpolants are not.
+        '''
+        return Path(self.get(kind + '_path'))
+
+
+class Spack(Object):
+    def __init__(self, prefix, cfg, defaults, stacks=None):
+        super().__init__(prefix, cfg, defaults)
+
+        self.setdefault("tag", "develop")
+        self.setdefault("url", "https://github.com/spack/spack.git")
+        self.setdefault("source_path", "{prefix}/spack")
+        self.setdefault("branch", "wcwc-{tag}")
+        self.setdefault("remote", "develop")
+
+        self._stacks = stacks or {}
+
+
+    @property
+    def source_path(self):
+        'Path to source installation of Spack'
+        return Path(self.get("source_path"))
+
+    @property
+    def exec_path(self):
+        'Path to the "spack" executable'
+        return self.source_path / "bin" / "spack"
+
+    def exe(self, cmd, scope=None, *args, **kwds):
+        '''
+        Return spack command function.
+        '''
+        if scope in self._stacks:
+            scope = self._stacks[scope].path("scope")
+        if scope:
+            args = ["-C", scope] + args
+        return which(self.exec_path, *args, **kwds)
+
+
+    def command(self, cmd, scope=None, *args, **kwds):
+        '''
+        Execute a spack sub command.
+
+        The command is given by cmd and may be a string or a list.  If string,
+        the spack executable is prepended to the string and the command line is
+        executed by a shell.  O.w. the spack executable is prepended to the list
+        and executed directly.
+
+        If a scope matches a stack name, its scope directory is used.  Otherwise
+        a passed scope is interpreted directly as a scope directory.
+
+        If clog is true, log the command.
+
+        kwds are passed directly to subprocess.
+        '''
+        return self.exe(cmd, scope=scope, *args, **kwds)()
+        
+    def init(self):
+        '''
+        Assure Spack is initialize.
+        '''
+        cfg = self.cfg
+
+        assure_git_repo(self.source_path, self.get("branch"), self.get("url"),
+                        self.get("tag"), self.get("remote"))
+        self.assure_scope_config()
 
 class Config:
     def __init__(self, prefix, config):
         self.prefix = Path(prefix or "/wcwc")
-        self.cfg_path = Path(config or self.prefix / "wcwc.yml")
-        self.cfg = dict(repos=default_repos)
-        if self.cfg_path.exists():
-            self.cfg = merge_dicts(self.cfg,
-                                   yaml.safe_load(self.cfg_path.read_text()))
+        self._cfg_path = Path(config or self.prefix / wcwc_config_filename)
+        if self._cfg_path.exists():
+            cfg = yaml.safe_load(self._cfg_path.read_text())
+            debug(f'configuration: {self._cfg_path}')
+        else:
+            cfg = yaml.safe_load(default_config_yaml)
+            debug('configuration: defaults')
+            
+        self._defaults = cfg.get("defaults",{})
+        self._stack_defaults = cfg.get("stack_defaults",{})
+        stack_defaults = merge_patch(dict(self._defaults), self._stack_defaults)
+        scfgs = cfg.get("stacks",{})
+        self._stacks = {snam:Stack(snam, self.prefix, scfg, **stack_defaults)
+                        for snam,scfg in scfgs.items()}
+
+        self.spack = Spack(self.prefix, cfg.get("spack",{}), self._defaults, stacks=self._stacks)
 
     @property
-    def repos(self):
-        '''Known repo names'''
-        return self.cfg["repos"].keys()
+    def cfg(self):
+        'Serialize to dict'
+        return dict(defaults = self._defaults,
+                    stack_defaults = self._stack_defaults,
+                    spack = self.spack._cfg,
+                    stacks = {n:s._cfg for n,s in self._stacks.items()})
 
+    @property
+    def stacks(self):
+        '''Known stack names'''
+        return list(self._stacks.keys())
 
-    def depgraph(self, *seeds):
+    def stack(self, name):
+        '''
+        Return the stack of the given name.
+        '''
+        return self._stacks[name]
+
+    def dependency_graph(self, *seeds):
+
+        '''
+        Return dependency graph of stack names.
+        '''
         gr = dict()
         for seed in seeds:
-            gr[seed] = set(list(self.cfg['repos'][seed].get("upstreams",())))
-            gr |= self.depgraph(*gr[seed])
+            gr[seed] = set(list(self.stack(seed).deps))
+            gr |= self.dependency_graph(*gr[seed])
         return gr
             
-
-    def resolve_upstreams(self, *seeds):
+    def dependency_list(self, *seeds, first=True):
         '''
-        Resolve upstream dependencies to a flat list.
+        Return a flat, ordered list of dependencies.
         '''
-        gr = self.depgraph(*seeds)
+        gr = self.dependency_graph(*seeds)
         return list(graphlib.TopologicalSorter(gr).static_order())
 
 
-    @functools.cached_property
-    def spack_exe(self):
-        return self.paths("base").root / "repo" / "bin" / "spack"
-
-    def save(self):
-        self.cfg_path.parent.mkdir(parents=True, exist_ok=True)
-        self.cfg_path.write_text(yaml.dump(self.cfg, sort_keys=False))
-
-    def repo(self, name, record=False, **kwds):
+    def save(self, output=None, overwrite=False):
         '''
-        Return a (git) repo dict with name, possibly overriding with kwds
+        Save current state to our cfg_file unless output is given.
+
+        If output is special "-", then write to stdout else output provides
+        the name of file to which the state is written.
         '''
-        got = dict(self.cfg['repos'].get(name, {}))
-        for key in "tag url upstreams".split():
-            val = kwds.get(key, None)
-            if val is None:
-                continue
-            got[key] = val
-        if record:
-            self.cfg['repos'][name] = got
-        return got
+        text = yaml.dump(self.cfg, sort_keys=False)
+        if output in ("-", "/dev/stdout"):
+            print(text)
+            return
+        if not output:
+            output = self._cfg_path
+        else:
+            output = Path(output)
+        if output.exists() and not overwrite:
+            raise click.UsageError(f"will not overwrite existing file: {output}")
+
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(text)
+        debug(f'wrote {output}')
+
+    def set_stack(self, name, **kwds):
+        '''
+        Define or update a stack of given name by patching kwds.
+        '''
+        scfg = self._cfg.get('stacks',{}).get(name, {})
+        self._cfg['stacks'][name] = merge_patch(dict(scfg), kwds)
         
     def assure_yaml(self, path, dat, force=False):
         path = Path(path)
@@ -220,8 +653,10 @@ class Config:
 
     def paths(self, name):
         '''
-        Return all canonical paths for repo.
+        Return all canonical paths for stack.
         '''
+        
+
         root = self.prefix / "spack" / name
         more = {k:root/k for k in "scope repo install environments".split()}
         more['git'] = root / "repo" / ".git"
@@ -257,9 +692,22 @@ class Config:
 
         cfg_file("repos.yaml", dict(repos=[str(paths.repo)]))
 
-        config_dat = dict(build_stage=['$user_cache_path/stage'],
-                          install_tree=dict(root=str(paths.install)),
-                          environments_root=str(paths.environments))
+        # overrides for main config.yaml
+        config_dat = {
+            "build_stage": ['$user_cache_path/stage'],
+            "install_tree": {
+                "root": str(paths.install),
+                "projections": {
+                    "all": installation_projection
+                }},
+            "environments_root": str(paths.environments)
+        }
+        # overrides for concretizer.yaml
+        concretizer_dat = {
+            "targets": {
+                "granularity": architecture_granularity
+            }
+        }
         
         ups = repo.get("upstreams", None)
         if ups:
@@ -279,7 +727,7 @@ class Config:
                                  config_dat)
 
         cfg_file("config.yaml", dict(config=config_dat))
-                 
+        cfg_file("concretizer.yaml", dict(concretizer=concretizer_dat))
 
 
     def assure_stack_clone(self, name, recurs=True):
@@ -322,6 +770,10 @@ class Config:
         else:
             git(f'checkout {want_branch}')
 
+    def log_command(self, name, t1, t2, rc, args, opts):
+        dbfile = str(self.prefix / "wcwc.db")
+        log_command(dbfile, name, t1,t2,rc,args,opts,self.cfg)
+
 
 def setup_logging(log_output, log_level):
     try:
@@ -331,7 +783,7 @@ def setup_logging(log_output, log_level):
     log.setLevel(level)
 
     if not log_output:
-        log_output = ["stdout"]
+        log_output = ["stderr"]
     for one in log_output:
         if one in ("stdout", "stderr"):
             sh = logging.StreamHandler(getattr(sys, one))
@@ -361,15 +813,70 @@ def cli(ctx, config, prefix, log_output, log_level):
     ctx.obj = Config(prefix, config)
 
 
-@cli.command("junk")
+def admin_command(name=None, **cmddef):
+    '''
+    Return a decorator for any WCWC admin command.
+
+    This logs the command to the db.
+    '''
+    def decorator(func):
+        @cli.command(name, **cmddef)
+        @click.pass_context
+        @functools.wraps(func)
+        def wrapper(ctx, *args, **kwds):
+
+            try:
+                ctx.obj.prefix.mkdir(parents=True, exist_ok=True)
+            except PermissionError:
+                raise click.UsageError(f"no permission create {ctx.obj.prefix}, give --prefix or set WCWC_PREFIX")
+
+
+            if not os.access(ctx.obj.prefix, os.W_OK):
+                raise click.UsageError(f"no write permission to {ctx.obj.prefix}, give --prefix or set WCWC_PREFIX")
+
+            t1 = datetime.now()
+            got = func(*args, **kwds)
+            t2 = datetime.now()
+            
+            ctx.obj.log_command(name or ctx.info_name, t1, t2, got, args, kwds)
+            return got
+        return wrapper
+    return decorator
+    
+
+
+#@cli.command("junk")
+@admin_command()
 @click.option("-p", "--prefix", default=None, type=str)
+@click.option("--throw", is_flag=True, default=False)
 @click.pass_context
-def junk(ctx, prefix):
+def junk(ctx, prefix, throw):
     '''
     Ignore this cmd, it is to test out click stuff.
     '''
     info(f'junk: {prefix=}')
     info(ctx.obj.cfg)
+    if throw:
+        raise ValueError("throwing")
+    return
+
+
+@cli.command("config-file")
+@click.option("-f","--force-overwrite", is_flag=True, default=False,
+              help="Allow to overwrite existing file")
+@click.argument("output", nargs=-1)
+@click.pass_context
+def config_file(ctx, output, force_overwrite):
+    '''
+    Emit a default config file.
+
+    By default, the config file is written under --prefix.
+    An argument of "-" will write to stdout.
+    Any other argument will be interpreted as a file name.
+    '''
+    if output:
+        output = output[0]
+    ctx.obj.save(output, force_overwrite)
 
 
 @cli.command("dump-config")
@@ -408,15 +915,15 @@ def list_oses():
         info(one)
 
 
-@cli.command("spack", context_settings=dict(ignore_unknown_options=True,
+@admin_command("spack", context_settings=dict(ignore_unknown_options=True,
                                             help_option_names=[]))
-@click.option("--stack", default=os.environ.get('SPACK_USER_CONFIG_PATH', "base"),
+@click.option("--stack", default="base",
               help="Set the 'stack' by name, translates to -C/--config-scope directory")
 @click.argument("args", nargs=-1, type=click.UNPROCESSED)
 @click.pass_context
 def spack(ctx, stack, args):
     '''
-    Wrapper around calling spack.
+    Wrapper around calling spack in ways that change the Spack install. 
     '''
     args = list(args)
     if not ("-C" in args or "--config-scope" in args):
@@ -427,8 +934,39 @@ def spack(ctx, stack, args):
         args = ["-C", scope_path] + args
     exe = which(ctx.obj.spack_exe, capture_error=False, capture_output=False, check=False)
     got = exe(args)
-    rc = sys.exit(got.returncode)
-    sys.exit(rc.returncode)
+    return got.returncode
+    # rc = sys.exit(got.returncode)
+    # sys.exit(rc.returncode)
+
+
+@cli.command("list-environments")
+@click.option("--stack", default="base",
+              help="Set the 'stack' by name, translates to -C/--config-scope directory")
+@click.pass_context
+def list_environments(ctx, stack):
+    '''
+    List defined system/shared environments.
+    '''
+    got = ctx.obj.spack.command("env list", scope=stack, capture_error=False, capture_output=False, check=False)
+    return got.returncode
+        
+
+@admin_command("create-environment")
+@click.option("-s", "--spec", multiple=True, default=[],
+              help="Set a seed spec to install / add to the environment")
+@click.option("--stack", default="base",
+              help="Set the 'stack' by name, translates to -C/--config-scope directory")
+@click.argument("name")
+@click.pass_context
+def create_environment(ctx, stack, spec, name):
+    '''
+    Create a named system/shared environment.
+    '''
+    spack = ctx.obj.spack.exe(scope=stack, capture_error=False, capture_output=False)
+    spack(f'env create {name}')
+    for one in spec:
+        spack(f'install --add {one}')
+
 
 @cli.command("list-scopes")
 @click.pass_context
@@ -442,34 +980,52 @@ def list_scopes(ctx):
         exist = "installed" if paths.scope.exists() else "missing"
         info(f'{name:12} {paths.scope} ({exist}) {tag}')
 
-def use_repo(record = True):
-    '''The command deals with a remote git repo'''
+
+def use_a_stack():
+
+    '''The command deals with a stack'''
     def decorator(func):
         @click.option("-t","--tag",default=None, type=str, 
                       help=f"override default git tag")
         @click.option("-u","--url",default=None, type=str,
                       help=f"override default git url")
-        @click.option("-U","--upstreams",default=None, type=str,
-                      help=f"override upstreams (comma separated list)")
+        @click.option("-d","--depends",default=None, type=str,
+                      help=f"override dependency stacks (comma separated list)")
         @click.option("-n","--name",default="base", type=str,
-                      help=f"give name of repo (default=base)")
+                      help=f"give name of stack (default=base)")
         @click.pass_context
         @functools.wraps(func)
-        def wrapper(ctx, tag, url, upstreams, name, *args, **kwds):
-            ctx.obj.repo(name, record=record, tag=tag, url=url, upstreams=upstreams)
-            kwds['name'] = name
+        def wrapper(ctx, tag, url, depends, name, *args, **kwds):
+            ctx.obj.set_stack(name, tag=tag, url=url, depends=depends)
+            kwds['stack'] = name
             return func(*args, **kwds)
         return wrapper
     return decorator
 
-@cli.command("install-stack")
+@cli.command("show-stack")
+@click.option("-f","--format", default="yaml",
+              help="format to output print")
+@use_a_stack()
+@click.pass_context
+def show_stack(ctx, format, stack):
+    '''
+    Print info about a stack.
+    '''
+    scfg = ctx.obj.stack(stack)
+    if format == "yaml":
+        info (yaml.dump(scfg, sort_keys=False))
+    else:
+        info (str(scfg))
+    
+
+@admin_command("install-stack")
 @click.option("-r", "--recurs", is_flag=True, default=False,
               help="recurs over upstreams, if any (default=False)")
 @click.option("-f","--force", is_flag=True, default=False,
               help="force overwriting (default=False)")
-@use_repo()
+@use_a_stack()
 @click.pass_context
-def install_stack(ctx, recurs, force, name):
+def install_stack(ctx, recurs, force, stack):
     '''
     Install the spack support for the named stack.
 
@@ -479,9 +1035,71 @@ def install_stack(ctx, recurs, force, name):
 
     No actual packages are installed.
     '''
-    ctx.obj.assure_stack(name, recurs, force)
+    ctx.obj.assure_stack(stack, recurs, force)
     ctx.obj.save()
     
+
+def use_spack():
+    '''The command allows for spack overrides'''
+    def decorator(func):
+
+        @click.option("-t","--tag",default=None, type=str,
+                      help=f"override default git tag/branch")
+        @click.option("-u","--url",default=None, type=str,
+                      help=f"override default git URL")
+        @click.option("-r","--remote",default="origin",
+                      help=f"override the git remote name")
+        @click.option("-b","--branch",default=None, type=str,
+                      help=f"override default branch")
+        @click.option("-p","--path",default=None, type=str,
+                      help=f"override path to spack source")
+
+        @click.pass_context
+        @functools.wraps(func)
+        def wrapper(ctx, tag, url, remote, branch, path, *args, **kwds):
+            if tag:
+                ctx.obj.spack.set("tag", tag)
+                if not branch:
+                    branch = f"wcwc-{tag}"
+            if branch:
+                ctx.obj.spack.set("branch", branch)
+            if url:
+                ctx.obj.spack.set("url", url)
+            if remote:
+                ctx.obj.spack.set("remote", remote)
+            if path:
+                ctx.obj.spack.set("source_path", path)
+
+            return func(*args, **kwds)
+        return wrapper
+    return decorator
+
+
+
+@admin_command("init-spack")
+@use_spack()
+@click.pass_context
+def init_spack(ctx):
+    '''
+    Initialize Spack in a prefix.
+
+    If no path is given, the value from configuration is used.  A relative path
+    is w.r.t. prefix.
+    '''
+    ctx.obj.spack.init()
+
+@admin_command("show-spack")
+@use_spack()
+@click.pass_context
+def show_spack(ctx):
+    '''
+    Initialize Spack in a prefix.
+
+    If no path is given, the value from configuration is used.  A relative path
+    is w.r.t. prefix.
+    '''
+    text = yaml.dump(ctx.obj.spack.cfg, sort_keys=False)
+    print(text)
 
 
 @cli.command("spack-setup")
@@ -492,18 +1110,8 @@ def install_stack(ctx, recurs, force, name):
 @click.pass_context
 def spack_setup(ctx, shell):
     '''
-    Emit the Spack env script to source, possibly divining the shell.
-
-    Note, do not log to stdout if you directly source the result.
+    Emit to stdout the path of the Spack env script for your shell.
     '''
-    if ctx.obj.prefix != "/wcwc":
-        if os.environ.get("WCWC_PREFIX",None) is None:
-            sys.stderr.write(f"""\
-I notice you are using a non-standard WCWC prefix.
-To avoid giving --prefix define:
-    WCWC_PREFIX="{ctx.obj.prefix}"
-""")
-        
 
     if shell == "auto":
         shell = os.environ.get("SHELL",None)
@@ -511,8 +1119,8 @@ To avoid giving --prefix define:
             user = os.environ.get("USER", run("id -u -n", lines=1))
             shell = run(f"getent passwd {user}", lines=1).split(":")[6]
         if not shell:
-            raise ValueError("can not divine shell")
-    shell = shell.split("/")[-1].strip()  #  if given as /path/to/shell
+            raise ValueError("can not divine shell, give it explicitly")
+    # shell = shell.split("/")[-1].strip()  #  if given as /path/to/shell
 
     ext = dict(sh="sh",bash="sh",zsh="sh",fish="fish",csh="csh",tcsh="csh")[shell]
 
@@ -520,24 +1128,24 @@ To avoid giving --prefix define:
     # This is a print, not log.  
     print(script)
     
+
 @cli.command("devenv")
-@click.option("-U","--upstreams",default=None, type=str,
-              help="override upstreams (comma separated list)")
+@click.option("-s","--stacks",default=None, type=str,
+              help="comma separated list of stacks")
 @click.argument("path")
 @click.pass_context
 def devenv(ctx, upstreams, path):
     '''
-    Create a Spack environment with associated upstreams.
+    Create a Spack environment based on a set of software stacks.
 
-    Once activated, packages may be installed.
+    Once activated, packages may be installed locally or added from the stacks.
     '''
 
     path = Path(path).absolute()
     if path.exists():
         debug(f'devenv: exists at {path}')
     else:
-        sexe = which(ctx.obj.spack_exe)
-        sexe(f'env create --dir {path}')
+        ctx.obj.spack.command(f'env create --dir {path}')
 
     spack_yaml = path / "spack.yaml"
 
@@ -550,9 +1158,13 @@ def devenv(ctx, upstreams, path):
 
         dat["upstreams"] = dict()
         dat["repos"] = list()
+        it_seen = set()
         for name in upstreams:
             paths = ctx.obj.paths(name)
-            dat["upstreams"][name] = dict(install_tree=str(paths.install))
+            it = str(paths.install)
+            if it not in seen:
+                dat["upstreams"][name] = dict(install_tree=it)
+            it_seen.add(it)
             dat["repos"].append(str(paths.repo))
 
     dat["config"] = dict(
