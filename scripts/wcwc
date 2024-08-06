@@ -1,4 +1,5 @@
-#!/usr/bin/env python
+#!/usr/bin/python3
+# NOT /usr/bin/env python as we want OS python always
 '''
 Utility to create, manage and use elements of a Wire-Cell Workstation Cluster.
 
@@ -17,6 +18,7 @@ import sqlite3
 from socket import gethostname
 from getpass import getuser
 import graphlib
+import tempfile
 import functools
 from pathlib import Path
 from collections import namedtuple
@@ -113,7 +115,6 @@ stacks:
 # These are "spelled" as the output of "lsb_release -ds".
 known_oses=("Debian GNU/Linux 12 (bookworm)",)
 
-
 def run(cmd, lines=None, capture_error=True, **opts):
     '''
     Apply default policy to subprocess.run() to execute "cmd"
@@ -206,9 +207,11 @@ def which(exe, def_args=None, **def_opts):
         return run(line, **opts)
     return func
 
-def log_command(dbfile, cmd, t1, t2, rc, args=None, opts=None, envs=None):
+# fixme: produce a spack funcexec that logs individual spack calls, including environ.
+# fixme: instrument logging directly in run() to Capture All The Things.
+def log_command(dbfile, cmd, t1, t2, rc, args=None, opts=None, cfgs=None):
     '''
-    Log a command.
+    Log a command to the database file.
 
     The command may be the name of an executable or a click command function.
 
@@ -216,12 +219,12 @@ def log_command(dbfile, cmd, t1, t2, rc, args=None, opts=None, envs=None):
     rc is return code.
     args list of command arguments.
     opts dict of any named command options.
-    envs dict of any environment configurations (shell, or program config).
+    cfgs dict of the WCWC configuration.
     '''
 
     args = args or []
     opts = opts or {}
-    envs = envs or {}
+    cfgs = cfgs or {}
 
     # dbfile = str(self.prefix / "wcwc.db")
 
@@ -239,7 +242,7 @@ def log_command(dbfile, cmd, t1, t2, rc, args=None, opts=None, envs=None):
     host TEXT,
     args JSON,
     opts JSON,
-    envs JSON)''')
+    cfgs JSON)''')
     
     if rc:
         try:
@@ -253,9 +256,9 @@ def log_command(dbfile, cmd, t1, t2, rc, args=None, opts=None, envs=None):
     host = gethostname()
 
     cur.execute('''INSERT INTO
-    commands(cmd, t1, t2, rc, user, host, args, opts, envs)
+    commands(cmd, t1, t2, rc, user, host, args, opts, cfgs)
     VALUES (?,?,?,?,?,?,?,?,?)''', (cmd, t1, t2, rc, user, host,
-                                    json.dumps(args), json.dumps(opts), json.dumps(envs)))
+                                    json.dumps(args), json.dumps(opts), json.dumps(cfgs)))
     db.commit()
     log.debug(f'{cmd} ( {args}, {opts} )')
 
@@ -345,6 +348,23 @@ def merge_patch(target, patch):
         return target
     return patch
 
+def yaml_merge_patch(path, patch):
+    '''
+    Apply patch to yaml file at path.
+
+    Patch is a data structure.  If path does not exist, patch is written.
+    '''
+    path = Path(path)
+    if path.exists():
+        dat = yaml.safe_load(path.read_text())
+        debug(f'yaml merge patch read: {path} {dat}')
+        dat = merge_patch(dat, patch)
+    else:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        dat = patch
+    debug(f'yaml merge patch write: {path} {dat}')
+    path.write_text(yaml.dump(dat, sort_keys=False))
+    
 
 def merge_dicts(dict1, dict2):
     """ Recursively merges dict2 into dict1 """
@@ -511,12 +531,14 @@ class Object:
         '''
         scope_path = self.path("scope")
         path = scope_path / fname
-        if path.exists():
-            old_dat = yaml.safe_load(path.read_text())
-            dat = merge_patch(dat, old_dat)
+        yaml_merge_patch(path, dat)
 
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(yaml.dump(dat, sort_keys=False))
+        # if path.exists():
+        #     old_dat = yaml.safe_load(path.read_text())
+        #     dat = merge_patch(dat, old_dat)
+
+        # path.parent.mkdir(parents=True, exist_ok=True)
+        # path.write_text(yaml.dump(dat, sort_keys=False))
         debug(f'wrote file: {path}')
         
 
@@ -624,7 +646,7 @@ class Spack(Object):
         '''
         extra = list()
         for stack in stacks or ():
-            extra += ["-C=" + str(stack.path("scope"))]
+            extra += ["-C", str(stack.path("scope"))]
 
         cli = extra
         if isinstance(args, str):  # stringify
@@ -761,7 +783,7 @@ class WCWC:
 
     def log_command(self, name, t1, t2, rc, args, opts):
         dbfile = str(self.prefix / "wcwc.db")
-        log_command(dbfile, name, t1,t2,rc,args,opts,self.cfg)
+        log_command(dbfile, name, t1, t2, rc, args, opts, self.cfg)
 
 
 def setup_logging(log_output, log_level):
@@ -894,11 +916,11 @@ def set_a_stack(with_spack=True):
     return decorator
 
 
-def admin_command(name=None, **cmddef):
+def admin_command(name=None, ignore_log_ok=False, **cmddef):
     '''
     Return a decorator for any WCWC admin command.
 
-    This logs the command to the db.
+    This logs the command to the db unless log is read-only for user and ignore_log_ok is true.
     '''
     def decorator(func):
         @cli.command(name, **cmddef)
@@ -906,21 +928,28 @@ def admin_command(name=None, **cmddef):
         @functools.wraps(func)
         def wrapper(ctx, *args, **kwds):
 
+            do_log = True
+
             try:
                 ctx.obj.prefix.mkdir(parents=True, exist_ok=True)
             except PermissionError:
-                raise click.UsageError(f"no permission create {ctx.obj.prefix}, give --prefix or set WCWC_PREFIX")
+                if ignore_log_ok:
+                    do_log = False
+                else:
+                    raise click.UsageError(f"no permission create {ctx.obj.prefix}, give --prefix or set WCWC_PREFIX")
 
 
-            if not os.access(ctx.obj.prefix, os.W_OK):
+            if do_log and not os.access(ctx.obj.prefix, os.W_OK):
                 raise click.UsageError(f"no write permission to {ctx.obj.prefix}, give --prefix or set WCWC_PREFIX")
 
             t1 = datetime.now()
             got = func(*args, **kwds)
             t2 = datetime.now()
             
-            ctx.obj.log_command(name or ctx.info_name, t1, t2, got, args, kwds)
-            ctx.obj.save(overwrite=True)
+            if do_log:
+                ctx.obj.log_command(name or ctx.info_name, t1, t2, got, args, kwds)
+                ctx.obj.save(overwrite=True)
+
             return got
         return wrapper
     return decorator
@@ -1085,39 +1114,6 @@ def install(ctx, stack, specs):
                                 capture_error=False, capture_output=False)
     return got.returncode
     
-@admin_command("make-sys-env")
-@click.option("-S","--stack", default=None, type=str, required=True,
-              help="The name of the stack in which to perform the installation")
-@click.option("-n", "--name", default=None, type=str, required=True,
-              help="The name of the system environment")
-@click.argument("specs", nargs=-1)
-@click.pass_context
-def make_sys_env(ctx, stack, name, specs):
-    '''
-    Create a named system/shared environment.
-
-    This command is idempotent.
-    '''
-    if stack not in ctx.obj.stacks:
-        raise click.UsageError(f'uknown stack: "{stack}"')
-
-    stack = ctx.obj.stacks[stack]
-    spack_exe = ctx.obj.spack.execfunc(stacks=[stack], capture_output=False)
-
-    envcfg = stack.path("environments") / name / "spack.yaml"
-    if not envcfg.exists():
-        spack_exe(f'env create {name}')
-
-    # If I do not munge the env the install quietly fails to populate the view.
-    # This might be a bug, or at least a dubious feature.
-    env = dict(os.environ)
-    env["SPACK_ENV_VIEW"] = "default"
-    env["SPACK_ENV"] = str(envcfg.parent)
-    for spec in specs:
-        spack_exe(f'install --add {spec}', env=env)
-
-
-
 @admin_command("init")
 @click.option("--recurs", is_flag=True, default=True,
               help="recurs over upstreams, if any (default=False)")
@@ -1145,44 +1141,40 @@ def init(ctx, recurs, force, stack):
     stack.init(ctx.obj, recurs)
     
 
-@cli.command("spack-shell")
+@cli.command("shell")
+@click.option("-S","--stacks", default=None, type=str, 
+              help="Comma-separated list of stack names, if needed to resolve environment")
 @click.option("-s", "--shell",
               default="auto",
               type=click.Choice(["sh","bash","dash","zsh","fish","csh","tcsh","auto"]),
               help="Set the shell flavor, default:auto")
-@click.option("-e", "--execute", is_flag=True, default=False,
-              help="Execute subshell in the environment instead of emitting shell environment settings")
+@click.option("-o", "--output", default=None, type=str,
+              help='Emit shell settings to given output, "-" or "stdout" for emitting to standard output')
+# @click.option("-e", "--execute", is_flag=True, default=False,
+#               help="Execute subshell in the environment instead of emitting shell environment settings")
 @click.option("-c", "--command", type=str, default=None,
-              help="Execute the command in a configured subshell")
+              help="Execute the command in a configured shell")
+@click.option("-e", "--environment", default=None, type=str,
+              help="Use given Spack Environment to determine shell settings")
+@click.option("-l", "--load", type=str, default=[], multiple=True,
+              help="Load the given package spec")
+@click.option("-k", "--keep", is_flag=True, default=False,
+              help="Retain settings file and emit its name (ignored for -o/--output)")
 @click.pass_context
-def spack_shell(ctx, shell, execute, command):
+def shell(ctx, stacks, shell, output, command, environment, load, keep):
     '''
-    Configure shell environment to use spack.
+    Configure shell environment.
 
-    This is a user command.  WCWC admins should not use this to modify the WCWC
+    This is a user command.  WCWC admins should not use this and then the WCWC
     installation.
 
-    It may be used to configure your shell environment like:
-
-      eval (wcwc spack-shell)    # fish
-      eval $(wcwc spack-shell)   # sh-like
-      eval `wcwc spack-shell`    # csh-like
-
-    Do NOT log to standard output ("-L stdout") with the above usage.
-
-    Or to execute a subshell:
-
-      wcwc spack-shell -e
-      # ...
-      exit 
-
-    Or to execute a specific command and return to your original shell.
-
-      wcwc spack-shell -c "which spack"
-
-    FIXME: support for "spack env" and "spack load" env munging
+    It supports a large cross product along these dimensions:
+    - the shell flavor (fish, sh-like and csh-like)
+    - the mode of supplying the target environment (settings, command or shell)
+    - the make up of the target environment (base, load modules, activate environment)
     '''
 
+    # figure out target shell
     if shell == "auto":
         shell = os.environ.get("SHELL",None)
         if not shell:
@@ -1196,77 +1188,156 @@ def spack_shell(ctx, shell, execute, command):
     script = ctx.obj.spack.path("source")  / "share" / "spack" / f"setup-env.{ext}"
     script = str(script)
 
-    if execute:
-        if shell == "bash":
-            cmd=["bash","--rcfile", script]
-            debug(f'execute: {" ".join(cmd)}')
-            os.execvp("bash", cmd)  # does not return
-        if shell == "fish":
-            os.execvp("fish", ["fish","-C", f"source {script}"])  # does not return
+    spack_prefix = 'spack'
+    if stacks:
+        for stack in stacks.split(','):
+            stack = ctx.obj.stacks[stack]
+            path = stack.path('scope', as_string=True)
+            spack_prefix += f' -C={path}'
+            # note, need "-C=path" not "-C path" otherwise the "spack" shell
+            # function does not think it is actually a shell function????
 
-        raise click.UsageError(f'execute unsupported for shell: "{shell}"')
+    # Command lines of shell environment settings
+    settings = [ f'source {script}' ]
+    if environment:
+        settings += [f'{spack_prefix} env activate {environment}']
+
+    for spec in load:
+        settings += [f'{spack_prefix} load {spec}']
+    
+    if output:
+        text = '\n'.join(settings)
+        if output in ('-',"stdout"):
+            print(text)
+            return
+        Path(output).write_text(text)
+        return
         
+    with tempfile.NamedTemporaryFile(delete=False) as rcfile:
+        if keep:
+            info(rcfile.name)
+        else:
+            settings += [f'rm -f {rcfile.name}']
+        text = '\n'.join(settings)
+        debug(f'Using configuration for {shell}:\n------------\n{text}\n------------')
+        rcfile.write(text.encode())
+
     if command:
         if shell == "bash":
-            command = f'source {script} && {command}'
+            command = f'source {rcfile.name} && {command}'
             os.execvp("bash", ["bash", "-c", command])  # does not return
         if shell == "fish":
-            os.execvp("fish", ["fish","-C", f"source {script}", "-c", command])  # does not return
+            os.execvp("fish", ["fish","-C", f"source {rcfile.name}", "-c", command])  # does not return
         raise click.UsageError(f'command unsupported for shell: "{shell}"')
 
-    envset = script.read_text()
-    print(envset)           # print() not info()
+    if shell == "bash":
+        cmd=["bash","--rcfile", rcfile.name]
+        debug(f'execute: {" ".join(cmd)}')
+        os.execvp("bash", cmd)  # does not return
+    if shell == "fish":
+        os.execvp("fish", ["fish","-C", f"source {rcfile.name}"])  # does not return
+
+    raise click.UsageError(f'execute unsupported for shell: "{shell}"')
+        
 
     
 
-@cli.command("make-dev-env")
-@click.option("-S","--stacks",default=None, type=str,
-              help="comma separated list of stacks")
-@click.argument("path")
+@admin_command("make-env", ignore_log_ok=True)
+@click.option("-S","--stacks", default=None, type=str, 
+              help="Comma-separated list of stack names which are upstreams to the environment")
+@click.option("-e", "--environment", default=None, type=str, 
+              help="The name or directory for the environment")
+@click.option("-t", "--target", default=None, type=str, 
+              help="The name of the stack in which the environment is placed")
+@click.argument("specs", nargs=-1)
 @click.pass_context
-def make_dev_env(ctx, upstreams, path):
+def make_env(ctx, stacks, environment, target, specs):
     '''
-    Create a developer environment.
+    Create a Spack Environment.
 
-    Once activated, packages may be installed locally or added from the stacks.
+    The environment may be of two flavors:
+
+    - system or shared :: a -t/--target is given and the -e/--environment names
+      an environment directory under the target stack.  These may only be created by the WCWC
+      admin and users share the environment and may activate it by name.  Users
+      may not modify the environment.
+
+    - anonymous or personal :: no -t/--target is given and the -e/--environment
+      gives a directory writable by the user who then becomes sole owner for the
+      environment.
+
+    The -S/--stacks gives a list of stacks providing packages (aka Spack
+    "upstreams").
+
+    An optional list of specs describing packages to add to the environment may
+    be given.  These packages will be installed in a stack install tree if they
+    are not yet existing.  Thus, if the user does not have write permission to
+    the install area, this command will fail.
+
+    This command is idempotent and may be repeated to add more specs.
     '''
 
-    path = Path(path).absolute()
-    if path.exists():
-        debug(f'devenv: exists at {path}')
-    else:
-        ctx.obj.spack.command(f'env create --dir {path}')
+    # Bring symmetry to the shared vs personal dichotomy.
+    stacks = stacks.split(",")
+    if target:                  # shared/system
+        if not environment:
+            raise click.UsageError("giving -t/--target requires also -e/--environment")
+        if "/" in environment:
+            raise click.UsageError("shared environment name can not look like a path")
 
-    spack_yaml = path / "spack.yaml"
+        # Apparently, Spack places the named environment into the last scope.
+        try:
+            stacks.remove(target)
+        except ValueError:
+            pass
+        stacks.append(target)
 
-    dat = dict()
+        target = ctx.obj.stacks[target]
+        epath = target.path("environments") / environment
+        ename = environment
+        create_cmd = f'env create {ename}'
+    else:                       # anonymous/personal
+        if not environment:
+            environment = "."
+        epath = Path(environment).absolute()
+        ename = str(epath)
+        create_cmd = f'env create --dir {ename}'
+        
+    stacks = [ctx.obj.stacks[s] for s in stacks]
+    spack_exe = ctx.obj.spack.execfunc(stacks=stacks, capture_output=False)
 
-    if upstreams:
-        upstreams = upstreams.split(",")
-        upstreams = ctx.obj.resolve_upstreams(*upstreams)
-        upstreams.reverse()
+    if not epath.exists():
+        spack_exe(create_cmd)
 
-        dat["upstreams"] = dict()
-        dat["repos"] = list()
-        it_seen = set()
-        for name in upstreams:
-            paths = ctx.obj.paths(name)
-            it = str(paths.install)
-            if it not in seen:
-                dat["upstreams"][name] = dict(install_tree=it)
-            it_seen.add(it)
-            dat["repos"].append(str(paths.repo))
+    # If personal env, make sure it has memory of the scopes that were used in making it.
+    if not target:
+        yaml_merge_patch(epath / "spack.yaml", {
+            "spack": {
+                "repos": [s.path("repo",as_string=True) for s in stacks],
+                "config": {
+                    "install_tree": {
+                        "root": str(epath / ".spack-env" / "opt"),
+                        "projections": {
+                            "all": '{namespace}/{architecture}/{compiler.name}-{compiler.version}/{name}-{version}-{hash}'
+                        }
+                    }
+                }
+            }
+        })
 
-    dat["config"] = dict(
-        install_tree=dict(root=str(path / "install")),
-        build_stage=[str(path / "stage")],
-        source_cache=str(path / "cache"))
+    for spec in specs:
+        spack_exe(f'-e {ename} add {spec}')
+    if specs:
+        spack_exe(f'-e {ename} concretize')
 
-    old_dat = yaml.safe_load(spack_yaml.read_text())
-    new_dat = merge_patch(old_dat, dict(spack=dat))
-    spack_yaml.write_text(yaml.dump(new_dat, sort_keys=False))
-    debug(f"devenv made at {path.absolute()} with upstreams {upstreams}")
-    info(f'Activate with:\n\tsource `wcwc spack-setup`\n\tspack env activate {path.absolute()}')
 
 if '__main__' == __name__:
     cli()
+
+    todo = '''
+
+- [ ] (docs) use of direnv by "spack env activate --sh > .envrc"
+
+- [ ] install wcwc to /wcwc and make it find spack command 
+
+'''
