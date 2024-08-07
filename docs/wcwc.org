@@ -16,12 +16,48 @@
 :CUSTOM_ID: intro
 :END:
 
-This document describes the Wire-Cell workstation cluster (WCWC).  A WCWC organizes a pool of workstations, installed software and various tasks in order to reduce and share effort between a group of users/developers.  As the name may imply, the WCWC was initially developed to support Wire-Cell related things and, indeed, it has Wire-Cell specific functionality.  But a WCWC can, in fact, be used for more general purposes.  In a WCWC the software is provided through Spack which supports installing from a vast set of packages.
+This document describes a loosely federated cluster of workstations designed to achieve a few high level goals:
 
-Sections [[#enroll]], [[#base]] and [[#stacks]] are intended to provide easy entry points to WCWC users (including using WCWC for software development). Section [[#spack]] gives a summary of information about Spack that is most salient to users of WCWC and developers of WCWC infrastructure.  Section [[#further]] provides guidance on optional ways to use WCWC.  The section [[#sysadmin]] describes use of Ansible and FreeIPA IDM to do OS-level sysadmin things for computers enrolled in BNL's WCWC and which WCWCs at other institutions may use as guidance for their own configurations.  And finally the section [[#nabs]] gives additional details useful for implementing your own WCWC including one running on your own laptop.
+- Enable easy sharing of workstation hardware.
 
-This document, various tools and configuration are provided by the [[https://github.com/brettviren/wcwc][wcwc]] package.
-It provides a program called ~wcwc~ that automates various user and administration tasks.  It also includes [[https://docs.ansible.com/][Ansible]] recipes that may be used for OS-level administration (see section [[#ansible]]).  
+- Share common software stacks and simplify their build and distribution.
+
+- Provide easy means to use and develop software based on these stacks.
+
+The name Wire-Cell Workstation Cluster (WCWC) is given to reflect the fact that its need was recognized in the context of development of Wire-Cell software.  Despite that name, it is general to many pursuits.  Indeed, and as will be shown, any software stacks that may be built with Spack can be incorporated into a WCWC.
+The WCWC was also conceieved for use on the internal campus network at BNL.  However, it may be replicated in whole or in parts at other institutions or even on personal workstations and laptops.
+
+** Overview
+:PROPERTIES:
+:CUSTOM_ID: overview
+:END:
+
+
+The following topics are covered in this document:
+
+- Workstation enrollment and user authentication in section [[#enroll]].  This section is BNL-specific.  It may be used as guidance for replicating at another institution or may be abandoned in favor of other methods, including none in the case of a stand-alone workstation or laptop that makes use of WCWC software stack support.
+
+- End-user interaction with the WCWC software ecosystem is described in section [[#user]].  This gives simple guidance on how a user may find what software is available, configure the user's account and use the software.
+
+- Software developer interaction with the WCWC software ecosystem is described in section [[#devel]].  This shows how to develop software leveraging the WCWC ecosystem.
+
+- Administrative tasks such as initializing WCWC software ecosystem from a green field, installing software packages and other such things are in section [[#admin]].
+
+- User, developer and administrator interaction with WCWC software ecosystem is through a single command called ~wcwc~.  The section [[#nabs]] documents how ~wcwc~ works under the hood to automate various tasks.
+
+** Terms
+:PROPERTIES:
+:CUSTOM_ID: terms
+:END:
+
+
+We will describe "primary" and "secondary" user accounts.  These labels do not
+indicate status but simply a "primary" user account is the account on the
+workstation that hosts the physical disk providing the user's ~$HOME~.  When a
+user logs into another workstation we call that a "secondary" account.
+
+We will also speak of "local" and "remote" accounts.  In all cases a "local" account is the one hosted by the physical computer at which the user happens to be seated.  We will also speak of "internal" account which is when a user is accessing a computer in the local network on which the WCWC workstations communicate.  Any account on a different network is called "external".
+
 
 Here we will use the term "primary" to indicate a user account on the single workstation that they "own" and which provides the user's physical ~$HOME~ directory.  We describe an non-primary account as "secondary".  A secondary account is simply one used by a user on a WCWC workstation that does not directly provide their physical ~$HOME~ disk.  Any account on a workstation outside of the WCWC is called "external".  An external account may be on a workstation the same LAN as the WCWC or be separated from the WCWC workstation LAN via a firewall.  When a workstation is called "local" it refers to the machine at which a user is physically sitting while a workstation is considered "remote" from the user when it is otherwise accessed.
 
@@ -30,26 +66,49 @@ Here we will use the term "primary" to indicate a user account on the single wor
 :CUSTOM_ID: enroll
 :END:
 
-The main features gained from the enrollment are:
+Enrollment is required to allow users to share hardware and software.  Enrolling a workstation in the BNL WCWC requires the computer custodian to perform these tasks or request the BNL WCWC admins for assistance:
+- Notify the WCWC admins of the intention to enroll the workstation and discuss any special needs.
+- Install an OS supported by the BNL WCWC (currently Debian 12 / "bookworm").
+- Configure the OS to use a static IP address that has been allocated from BNL ITD.
+- Place a copy of the [[https://www.phy.bnl.gov/~bviren/wire-cell/docs/wcwc.pub][BNL WCWC admin SSH public]] keys in ~/root/.ssh/authorized_keys~.
 
-- Access to ~/wcwc~ holding a large set of software builds of various stacks.
-- Ability for the workstation owner to log into other WCWC workstations and have a shared ~$HOME~.
-- Likewise, ability for other WCWC members to log into the workstation to make use of its resources.
+Every BNL WCWC user must perform these tasks to gain access to WCWC workstations:
+- Assure they have a [[https://www.phy.bnl.gov/Accounts/][Physics department SSH account]].
+- The user has a primary account on an existing WCWC workstation or host WCWC workstation can be identified.
+- Coordinate with the WCWC admin to integrate any existing local accounts on WCWC workstations.
 
-#+begin_note
-We assume here the WCWC instance that resides on the BNL campus network.  Other WCWCs may be constructed differently.  
-People are encouraged to make use of WCWC in other clusters and are free to apply their own structure.  A single user on a laptop can benefit from becoming its own WCWC.  Guidance on alternative WCWC structures is given in the section [[#further]]
-#+end_note
+The user account integration process requires the user to briefly log out of a WCWC workstation while the account and its files are given a unique user ID number.  If the user has more than one primary account, one must be selected to provide ~$HOME~ to the WCWC cluster.
 
-The BNL WCWC is initially comprised of a subset of the workstations used by the BNL Wire-Cell team.  To enroll a workstation into WCWC the owner follow these requirements and steps:
+* Software end-user
+:PROPERTIES:
+:CUSTOM_ID: user
+:END:
 
-- Be a custodian or otherwise primary user of a workstation on the BNL campus network.
-- Install a supported OS (currently Debian 12 / "bookworm").
-- Request a static IP from BNL DNS admins and configure the OS to use it.
-- Add the [[https://www.phy.bnl.gov/~bviren/wire-cell/docs/wcwc.pub][BNL WCWC admin SSH public]] keys to ~/root/.ssh/authorized_keys~.
-- Assure all user IDs, file permissions and ~$HOME~ locations are as expected by WCWC. (see sections [[#user-ids]] and [[#home-dirs]])
-- Notify the WCWC admin for further OS configuration and discuss any special needs 
-The workstation owner may request the WCWC admin to help with these items.  After these enrollment tasks are complete, the WCWC admin will install various OS packages and perform OS configuration to complete the integration into the WCWC.
+** OS packages
+
+In general, only OS packages provided by the distribution (Debian) will be installed.  These can be installed across all WCWC workstations.  Special cases for non-distribution OS packages may be considered. Contact the WCWC admin if some OS package is wanted but not installed.
+
+** Spack packages and ~wcwc~
+
+The large software stacks for various projects and experiments are installed by the WCWC admin via Spack and made available to each WCWC workstation under the ~/wcwc~ directory.   The ~wcwc~ program is available to simplify usage of this software.  It is placed in the same location as the ~spack~ program itself.
+
+#+begin_example
+/wcwc/spack/bin/wcwc
+#+end_example
+
+
+
+
+* Developer
+:PROPERTIES:
+:CUSTOM_ID: devel
+:END:
+
+
+* Administrator
+:PROPERTIES:
+:CUSTOM_ID: admin
+:END:
 
 
 * Base software stack
