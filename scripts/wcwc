@@ -1243,26 +1243,26 @@ def shell(ctx, stacks, shell, output, command, environment, load, keep):
     
 
 @admin_command("make-env", ignore_log_ok=True)
-@click.option("-S","--stacks", default=None, type=str, 
+@click.option("-S","--stacks", default=None, type=str,
               help="Comma-separated list of stack names which are upstreams to the environment")
+@click.option("-T", "--target", default=None, type=str, 
+              help="The name of the stack in which the environment is placed")
 @click.option("-e", "--environment", default=None, type=str, 
               help="The name or directory for the environment")
-@click.option("-t", "--target", default=None, type=str, 
-              help="The name of the stack in which the environment is placed")
 @click.argument("specs", nargs=-1)
 @click.pass_context
-def make_env(ctx, stacks, environment, target, specs):
+def make_env(ctx, stacks, target, environment, specs):
     '''
     Create a Spack Environment.
 
     The environment may be of two flavors:
 
-    - system or shared :: a -t/--target is given and the -e/--environment names
+    - system or shared :: a -T/--target is given and the -e/--environment names
       an environment directory under the target stack.  These may only be created by the WCWC
       admin and users share the environment and may activate it by name.  Users
       may not modify the environment.
 
-    - anonymous or personal :: no -t/--target is given and the -e/--environment
+    - anonymous or personal :: no -T/--target is given and the -e/--environment
       gives a directory writable by the user who then becomes sole owner for the
       environment.
 
@@ -1278,10 +1278,14 @@ def make_env(ctx, stacks, environment, target, specs):
     '''
 
     # Bring symmetry to the shared vs personal dichotomy.
-    stacks = stacks.split(",")
+    if stacks:
+        stacks = stacks.split(",")
+    else:
+        stacks = []
+
     if target:                  # shared/system
         if not environment:
-            raise click.UsageError("giving -t/--target requires also -e/--environment")
+            raise click.UsageError("giving -T/--target requires also -e/--environment")
         if "/" in environment:
             raise click.UsageError("shared environment name can not look like a path")
 
