@@ -10,6 +10,13 @@
 (setenv "PATH" (concat (getenv "PATH") ":" (expand-file-name "../scripts")))
 #+end_src
 
+#+begin_src sh :results output drawer
+scp wcwc.html wcwc.pdf hierocles.bnl:public_html/wire-cell/docs/
+#+end_src
+
+#+RESULTS:
+:results:
+:end:
 
 * Introduction
 :PROPERTIES:
@@ -61,23 +68,45 @@ We will also speak of "local" and "remote" accounts.  In all cases a "local" acc
 
 Here we will use the term "primary" to indicate a user account on the single workstation that they "own" and which provides the user's physical ~$HOME~ directory.  We describe an non-primary account as "secondary".  A secondary account is simply one used by a user on a WCWC workstation that does not directly provide their physical ~$HOME~ disk.  Any account on a workstation outside of the WCWC is called "external".  An external account may be on a workstation the same LAN as the WCWC or be separated from the WCWC workstation LAN via a firewall.  When a workstation is called "local" it refers to the machine at which a user is physically sitting while a workstation is considered "remote" from the user when it is otherwise accessed.
 
-* Workstation enrollment
+* Enrollment
 :PROPERTIES:
 :CUSTOM_ID: enroll
 :END:
 
-Enrollment is required to allow users to share hardware and software.  Enrolling a workstation in the BNL WCWC requires the computer custodian to perform these tasks or request the BNL WCWC admins for assistance:
-- Notify the WCWC admins of the intention to enroll the workstation and discuss any special needs.
-- Install an OS supported by the BNL WCWC (currently Debian 12 / "bookworm").
+** BNL WCWC Enrollment
+
+A workstation and user enrollment process is required for hardware and human to become members of BNL WCWC.
+
+*** Workstation enrollment
+Enrolling a workstation is initiated by its BNL custodian ("owner") or designee.
+
+- Contact the BNL WCWC admin to discuss any special needs for the workstation or user(s).
+- Install a supported OS (see section [[#os]])
 - Configure the OS to use a static IP address that has been allocated from BNL ITD.
 - Place a copy of the [[https://www.phy.bnl.gov/~bviren/wire-cell/docs/wcwc.pub][BNL WCWC admin SSH public]] keys in ~/root/.ssh/authorized_keys~.
 
-Every BNL WCWC user must perform these tasks to gain access to WCWC workstations:
-- Assure they have a [[https://www.phy.bnl.gov/Accounts/][Physics department SSH account]].
-- The user has a primary account on an existing WCWC workstation or host WCWC workstation can be identified.
-- Coordinate with the WCWC admin to integrate any existing local accounts on WCWC workstations.
+*** User enrollment
+Every BNL WCWC user must perform these tasks to assure BNL WCWC membership:
+- Obtain a [[https://www.phy.bnl.gov/Accounts/][Physics department SSH account]].
+- Determine on which workstation they will be a primary user (where their ~$HOME~ resides)
+- Coordinate with the WCWC admin make alteration to user IDs and file ownership and permissions (see below).
 
-The user account integration process requires the user to briefly log out of a WCWC workstation while the account and its files are given a unique user ID number.  If the user has more than one primary account, one must be selected to provide ~$HOME~ to the WCWC cluster.
+Different, pre-existing local user accounts tend to have conflicting user ID numbers (eg 1000 or 1001).  A unique user ID is required to simplify the sharing of ~$HOME~ via NFS.  The process to migrate to a unique user ID number is relatively simple and the WCWC admin will handle it.  However, the user must fully log out and cease any running processes on the workstation while the UID change is made.
+
+
+*** Supported operating systems
+:PROPERTIES:
+:CUSTOM_ID: os
+:END:
+
+BNL WCWC currently supports the Debian version 12 distribution of GNU/Linux (aka "stable" aka "bookworm").  BNL WCWC workstations will be upgraded to Future releases of Debian in coordination with the workstations custodians and WCWC users.
+
+** Other WCWCs
+
+The use of the ~wcwc~ command, described in the sections below, is not strongly dependent on the OS-layer.
+Institutions that adopt the WCWC model are encouraged to develop their own enrollment processes and OS-layer policy.  These necessarily are expected to differ than the above.  Likewise, individual users of laptops or non-clustered workstations can benefit from ~wcwc~ and likely need no special "enrollment" process.
+
+The ~wcwc~ command for providing software suites is well tested on the operating systems used by the BNL WCWC.  It may work on other Linux distributions or perhaps even other unix-like operating systems though binaries produced by ~wcwc~ are not expected to be portable.  Future work may be envisioned to aggregate a broader community with a heterogeneous set of operating systems.
 
 * Software end-user
 :PROPERTIES:
@@ -88,15 +117,131 @@ The user account integration process requires the user to briefly log out of a W
 
 In general, only OS packages provided by the distribution (Debian) will be installed.  These can be installed across all WCWC workstations.  Special cases for non-distribution OS packages may be considered. Contact the WCWC admin if some OS package is wanted but not installed.
 
-** Spack packages and ~wcwc~
+** Introduction of Spack and ~wcwc~
 
-The large software stacks for various projects and experiments are installed by the WCWC admin via Spack and made available to each WCWC workstation under the ~/wcwc~ directory.   The ~wcwc~ program is available to simplify usage of this software.  It is placed in the same location as the ~spack~ program itself.
+The large software stacks for various projects and experiments are installed by the WCWC admin via Spack and made available to each WCWC workstation under the ~/wcwc~ directory.   Spack is a system used throughout HEP and other scientific communities to build and manage a large variety of different software from single packages to huge interdependent suites of multiple versions, build variants, compilers and hardware architectures.  All software provided under ~/wcwc~ can be manged and utilized with the ~spack~ command.  On top of ~spack~, WCWC workstations provide the ~wcwc~ command which automates and simplifies common required tasks.  The ~wcwc~ command should be available to all users in their default ~$PATH~.  To get started with ~wcwc~, a user is encouraged to become familiar with its command-line help.
 
 #+begin_example
-/wcwc/spack/bin/wcwc
+$ wcwc --help
+
+$ wcwc <command> --help
 #+end_example
 
+The remainder of this section describes how to use ~wcwc~ for common tasks that "end users" may require.  Subsequently in  sections [[#devel]] and [[#admin]] we describe how to use ~wcwc~ for developers and cluster administrators, respectively.
 
+** Shell environment
+
+Special shell environment is technically not required to use Spack software but some level of shell environment setting is helpful to hide the necessarily complexity of Spack structure.  Spack provides a few means to make these shell settings and ~wcwc~ simplifies and extends them through the ~wcwc shell~ command.
+
+#+begin_example
+$ wcwc shell --help
+#+end_example
+We will now walk through a series of progressively more sophisticated methods to configure a shell environment.
+
+*** Basic shell environment
+
+A minimal shell environment can be obtained which provides access to ~spack~:
+
+#+begin_example
+u$ wcwc shell
+s$ exit
+#+end_example
+This starts a new instance of the user's shell with access to ~spack~.  The user may perform low-level ~spack~ commands in this shell and when finished may simply ~exit~ to return to the original shell environment.
+
+#+begin_note
+We have introduced a notation to mark the shell prompt to indicate something about a particular shell configuration.  Here, ~u$~ indicates the user's nominal shell environment and ~s$~ indicates a shell configured for Spack.
+#+end_note
+
+By default, ~wcwc shell~ executes an instance of the same shell currently run by the user.  The user may explicitly specify the shell to execute:
+
+#+begin_example
+tcsh-u$ wcwc shell --shell bash
+bash-s$ 
+#+end_example
+
+*** Using individual packages
+
+Spack supports a method to modify shell environment to use individual software packages called Environment Modules and ~wcwc shell~ exposes this support
+
+#+begin_example
+u$ wcwc shell --load root
+#+end_example
+In general, any given package is specified with a description written in a small language called a Spack "spec".  See section [[#spec]] for a brief introduction.
+
+*** One-shot commands
+
+Above we used ~spack spec~ to enter an interactive shell.  The user must issue ~exit~ to return to the original, calling shell.  When the user requires executing a single command in a shell configured to use Spack, they may do so like:
+
+#+begin_example
+u$ wcwc shell --load root --command "root -l"
+root [0] .q
+u$ 
+#+end_example
+Note, exiting ~root~ brings the user back to the original shell.
+
+*** Using Spack Environments
+
+Spack provides a shell setting mechanism called Spack Environments.  These are NOT the same as Environment Modules but achieve some of the same goals.  While Environment Modules will add an entry to ~PATH~-like environment variables for each package "loaded", a Spack Environment aggregates packages through a file system directory called a *view*.  This provides a few benefits: only a single entry is needed in ~PATH~-like variables and the aggregation is durable and usable beyond a particular shell.
+
+Spack Environments can be of two types: "system" aka "shared and "personal" aka "anonymous" aka "developer".  Here, we describe the first type and see section [[#devenv]] for information about the second type.  The "system" environments are defined by the WCWC admin and may be shared by users.  To make use of an shared environment:
+
+#+begin_example
+u$ wcwc shell --environment <envname>
+e$
+#+end_example
+
+Available environments can be listed:
+#+begin_example
+u$ wcwc list-env --stacks all
+u$ wcwc shell -S <stackname> --environment <envname>
+#+end_example
+As implied here, in WCWC, environments are typically defined in the context of a WCWC "stack".  See section [[#stacks]] for more information on stacks.
+
+*** Combining
+
+Environment Modules and Spack Environments may be used together:
+#+begin_example
+u$ wcwc shell --load root --environment wct-minimial
+r+wc$ 
+#+end_example
+And one may use either in a one-shot command.
+#+begin_example
+u$ wcwc shell --load root --environment wct-minimial --command "which root; which wire-cell"
+u$
+#+end_example
+
+*** Shell mutation
+
+At no point will any ~wcwc shell~ command modify the ....
+
+
+** A few Spack and WCWC concepts
+
+This section describes some concepts introduced above.  
+
+*** Spack spec
+:PROPERTIES:
+:CUSTOM_ID: spec
+:END:
+
+In the example above, "~root~" is an abstract "spec" naming just the package.  When multiple package *instances* are installed, this name is ambiguous.  The command can not determine which installed instance to select 
+and more "concrete" version of the spec must be used.  For example, if there are multiple versions of ~root~ installed we must provide a more complete spec:
+#+begin_example
+$ wcwc shell --load root@6.30.06
+#+end_example
+
+See the Spack documentation for details on [[https://spack.readthedocs.io/en/latest/basic_usage.html#sec-specs][spec]].  In WCWC one can discover installed package instances with:
+
+#+begin_example
+u$ wcwc shell --command "spack find root"
+-- linux-debian12-x86_64_v3 / gcc@12.2.0 ------------------------
+root@6.30.06
+==> 1 installed package
+#+end_example
+
+In WCWC, packages are installed into the "namespace" of a stack and the above only searches the base Spack stack.  See section [[#stacks]] for more information.
+
+*** WCWC stacks
 
 
 * Developer
@@ -104,12 +249,23 @@ The large software stacks for various projects and experiments are installed by 
 :CUSTOM_ID: devel
 :END:
 
+** devenv
+:PROPERTIES:
+:CUSTOM_ID: devenv
+:END:
+
+
 
 * Administrator
 :PROPERTIES:
 :CUSTOM_ID: admin
 :END:
 
+
+
+* XXXXXXXXXXXXX
+
+Below here needs editing and incorporating in the rewrite above.
 
 * Base software stack
 :PROPERTIES:
