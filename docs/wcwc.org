@@ -108,7 +108,7 @@ Institutions that adopt the WCWC model are encouraged to develop their own enrol
 
 The ~wcwc~ command for providing software suites is well tested on the operating systems used by the BNL WCWC.  It may work on other Linux distributions or perhaps even other unix-like operating systems though binaries produced by ~wcwc~ are not expected to be portable.  Future work may be envisioned to aggregate a broader community with a heterogeneous set of operating systems.
 
-* Software end-user
+* User
 :PROPERTIES:
 :CUSTOM_ID: user
 :END:
@@ -180,6 +180,9 @@ u$
 Note, exiting ~root~ brings the user back to the original shell.
 
 *** Using Spack Environments
+:PROPERTIES:
+:CUSTOM_ID: user-env
+:END:
 
 Spack provides a shell setting mechanism called Spack Environments.  These are NOT the same as Environment Modules but achieve some of the same goals.  While Environment Modules will add an entry to ~PATH~-like environment variables for each package "loaded", a Spack Environment aggregates packages through a file system directory called a *view*.  This provides a few benefits: only a single entry is needed in ~PATH~-like variables and the aggregation is durable and usable beyond a particular shell.
 
@@ -242,6 +245,20 @@ root@6.30.06
 In WCWC, packages are installed into the "namespace" of a stack and the above only searches the base Spack stack.  See section [[#stacks]] for more information.
 
 *** WCWC stacks
+:PROPERTIES:
+:CUSTOM_ID: stacks
+:END:
+
+
+A WCWC "stack" solidifies a nascent Spack pattern.  A "stack" represents a subset of packages from a larger overall set.  Specifically, the subset consists of packages that can be built by a particular Spack "repo".  A WCWC "stack" provides a Spack configuration "scope" that associates a repo, its corresponding Spack "namespace", a package install tree and projection and a location to store definitions of system or shared Spack Environments.  The stack may also have an associated git remote repository URL (and a git branch and/or tag) that provides the Spack "repo".
+
+A stack may coarsely depend on another stack with a stack corresponding to the Spack "builtin" repo forming the trunk of that dependency tree.  If on stack's install tree differs from a dependency then that dependency is considered a Spack "upstream".  Otherwise, stack install trees may coincide though it is recomended to define a stack's "projection" to begin with ~{namespace}/~ in order to keep distinct packages provided by each stack's Spack repo.  In particular, this distinction allows to resolve namespace collisions that arise when different Spack repos providing packages of identical name.
+
+For users of ~wcwc~, what is important to understand is that they may need to be named when using or making Spack Environments and/or packages.  The ~wcwc~ subcommands generally take the ~-S/--stacks~ option to provide a comma-separated list of stacks:
+#+begin_example
+$ wcwc <command> --stacks wirecell,base [....]
+#+end_example
+
 
 
 * Developer
@@ -249,11 +266,54 @@ In WCWC, packages are installed into the "namespace" of a stack and the above on
 :CUSTOM_ID: devel
 :END:
 
-** devenv
+** Personal environments
+:PROPERTIES:
+:CUSTOM_ID: personal-env
+:END:
+
+We saw the use of "system" or "shared" environments in section [[#user-env]].  Here we describe how to make a "personal" environment.  It differs from a system environment largely in that its directory resides in a user-owned area and that we will refer to it by its directory path instead of a name.  It also differs in that it is not shared and its life cycle is solely controlled by user.
+
+To begin, we create a personal environment, based on a number of stacks and potentially with some number of initial specs:
+#+begin_example
+u$ wcwc make-env --help
+
+u$ wcwc make-env --stacks wirecell --environment my-env/ <spec> [...]
+#+end_example
+Additional specs may be added by repeating this command listing just the new specs.
+
+We may then create a shell configured to use this environment similarly to how we did with system environments in section [[#user-env]] except that we give our environment directory instead of a name:
+#+begin_example
+u$ wcwc shell --environment my-env/
+e$
+#+end_example
+
+** Installing packages to environments
+:PROPERTIES:
+:CUSTOM_ID: env-install-package
+:END:
+
+
+When adding a spec to an environment as shown in section [[#personal-env]] we must only provide specs that describe packages installed in a stack.  It is also possible to install novel package instances directly to an environment.
+
+Example t.b.d.
+
+** Developer environments
 :PROPERTIES:
 :CUSTOM_ID: devenv
 :END:
 
+Personal environments may be easily used for developing software as all package files are collected into a single file system tree called the "view".  In the above example, the view directory is at:
+
+#+begin_example
+my-env/.spack-env/view/
+#+end_example
+
+When the environment settings are activated (~wcwc shell -e my-env~) Spack defines a variable ~SPACK_ENV~ that points to the root directory.  This may then be used to configure build systems of software to be developed.  For example using ~waf~ or ~wcb~ from Wire-Cell Toolkit or Prototype we may execute:
+#+begin_example
+e$ ./wcb configure --prefix=$SPACK_ENV/.spack-env/view [...]
+e$ ./wcb install
+#+end_example
+In the case of WCT, this does two things.  It tells the build system to check in the "prefix" when auto-locating required dependencies and it uses the "prefix" as the installation target.  In the case where the environment and its view are filled with files from WCT itself, this installation merely overwrites the symlinks.
 
 
 * Administrator
@@ -261,1050 +321,66 @@ In WCWC, packages are installed into the "namespace" of a stack and the above on
 :CUSTOM_ID: admin
 :END:
 
+The WCWC administrator is responsible to assemble the original WCWC, assist with enrollment and populate ~/wcwc~ with packages, stacks, and environments.  Users wishing to make use of ~wcwc~ to supply software to their individual (non-clustered) laptops or workstations will also be an WCWC administrator.  This section describes ways that the ~wcwc~ command can assist in some of these tasks.
 
+** Green field installation
 
-* XXXXXXXXXXXXX
-
-Below here needs editing and incorporating in the rewrite above.
-
-* Base software stack
-:PROPERTIES:
-:CUSTOM_ID: base
-:END:
-
-
-With enrollment from section [[#enroll]] completed, we now provide a set of examples for how using the base software stack provided by WCWC.  Here, a "stack" refers to a particular set of packages.  A "package" refers to the abstract notion of some software project's body of work.  Each package in the stack may be installed to produce a package "instance" along with a concrete set of other packages instances that provide dependencies.  You may select among the instances for the purposes of running the software they provide or for developing against their libraries.
-
-The WCWC software is built with the ~spack~ command from the [[https://spack.io/][Spack project]].  The ~spack~ command is exposed to the WCWC user and will be used in the examples without providing much explanation.  The user may read the excellent Spack documentation and refer to the [[file:wcwc-system.org][WCWC System]] document for additional details.
-
-For new users, take note that the subsequent section [[#stacks]] repeats the examples from this section in forms modified to make use of "extended software stacks" that provide additional packages such as those relevant to Wire-Cell.
-
-** Spack shell environment
-:PROPERTIES:
-:CUSTOM_ID: spack-shell
-:END:
-
-
-The examples will rely on some initial shell environment configuring.
-Discover and load a shell environment script appropriate for your shell:
-#+begin_example
-$ ls /wcwc/spack/base/repo/share/spack/setup-env.*
-
-$ source /wcwc/spack/base/repo/share/spack/setup-env.sh
-#+end_example
+Starting from a "vanilla" computer, we describe how to construct the ~/wcwc~ area.  
 
 #+begin_note
-Users who wish to may avoid such global shell environment manipulation.  See the document [[file:wcwc-alt.org]] for guidance on alternative methods.
+It is recommended to create a special user (eg "wcwc") that has sole write permission to ~/wcwc~.
+In principle, multiple users may contribute to modifying ~/wcwc~ but that can lead to confusion and "cruft".
+Future WCWC development may explore ways to allow multiple users and workstations to contribute to building out the ~/wcwc~ contents.
 #+end_note
 
-
-** Ad-hoc use of individual packages
-:PROPERTIES:
-:CUSTOM_ID: spack-load
-:END:
-
-
-
-Next, discover available package *instances*.
+We start by selecting a location to store all the software.  Potentially 100s of GB or more may be required depending on how much software is installed.  By default, the ~/wcwc~ directory is used but a non-standard location may be set in one of two ways:
 #+begin_example
-$ spack find
+$ export WCWC_PREFIX=/path/to/wcwc
+
+$ wcwc --prefix=/path/to/wcwc [...]
 #+end_example
-Finally, modify your shell environment to use a package instance and its dependencies.
-#+begin_example
-$ spack load root
+The command line overrides environment variable.  If a non-standard WCWC prefix is used, then it must be subsequently used by all users of the ~wcwc~ command.  We will assume henceforth that the default prefix is used.
 
-$ root --version
-ROOT Version: 6.30/06
+To begin, we use ~wcwc~ to produce an initial configuration file named ~wcwc.yaml~ in the prefix:
+#+begin_example
+$ wcwc dump-config
 #+end_example
-To finalize the session you may exit the shell or unload any that were previously loaded
+Edit this file to change any git tags of stack git repositories and/or add/remove any stacks.  You may also consider redefining the install tree which will hold the installed packages.  Each stack may have its own install tree and/or they may have unique projections via the use of ~{namespace}~ in the pattern.
+
+The base Spack and any other stacks can then be initialized simply with:
 #+begin_example
-$ spack unload root
+$ wcwc init spack
+$ wcwc init wirecell
 #+end_example
+This creates a ~stacks/<stack>/~ subdirectory under the WCWC prefix to hold the scope and environments and potentially a unique install tree.
 
-When more than one instance of a package is installed, you may need to provide a more concrete [[https://spack.readthedocs.io/en/latest/basic_usage.html#sec-specs][spec]] than just a package name.  Here are some ways to better specify what to "load" after we discover available versions and variants of a package:
+
+** Installing packages
+
+Installing packages with ~wcwc~ requires naming their spec.  Eg:
 #+begin_example
-$ spack find -lv root
-
-$ spack load root@6.30.06
-
-$ spack load root+minut
-
-$ spack load root/arvd7i3
+$ wcwc install root
 #+end_example
+This will install the "preferred" version (usually the newest) of the ~root~ package into the default stack (Spack itself with default WCWC configuration).
 
-
-** Durable shell environment
-:PROPERTIES:
-:CUSTOM_ID: spack-env
-:END:
-
-A user can go far with just ~spack load~ but it becomes challenging to reproduce a particular shell environment as more packages and more specific packages are required.  To solve this, "Spack Environments" can be used.  For simple end-user, creating and using them can be done with:
+To install a package into a stack one must name it.  For example, at the time of writing Spack does not build ~go-jsonnet~ but the ~wirecell~ stack does.
 #+begin_example
-$ spack env activate --create --dir my-env
-$ spack add root
-$ spack concretize
+$ wcwc install --stacks wirecell go-jsonnet
 #+end_example
-This creates the directory ~my-env~ which will hold various items and acts as a [[https://spack.readthedocs.io/en/latest/configuration.html#configuration-scopes][Spack configuration scope]].
-The *spec* given to ~spack add~ is equivalent to what you may given to ~spack load~.  Later in a fresh shell the shell environment configuration can be regained with:
+When multiple stacks are considered and more than one provide the named package, Spack will determine which to use (the one from the last repo registered).  In such a case, it is recommended to qualify the package name with the namespace.  In a contrived and not realistic example (the two stacks are mutually exclusive at the time of writing):
 #+begin_example
-$ spack env activate my-env
+$ wcwc install --stacks wirecell,art wirecell.go-jsonnet
 #+end_example
 
-#+begin_note
-After initial creation, more packages can be subsequently added.  Run ~spack concretize~ after doing so.
-#+end_note
-
-To return your shell environment to the state before activating a Spack Environment, issue:
+As described in section [[#spec]], multiple instances of the same package may be installed.  It is at installation time that one may distinguish versions, variants and other parameters that maybe written in a spec.  For example to install a minimal and a maximal WCT of a specific version:
 #+begin_example
-$ spack env deactivate
+$ wcwc install -S wirecell wire-cell-toolkit@0.28.0~glpk~root~hdf
+$ wcwc install -S wirecell wire-cell-toolkit@0.28.0+glpk+root+hdf
 #+end_example
-
-You may ~rm~ a Spack Environment directory manually or have Spack do it:
-#+begin_example
-$ spack env remove my-env
-#+end_example
-
-** Developer environment
-:PROPERTIES:
-:CUSTOM_ID: spack-devenv
-:END:
-
-A Spack Environment, such as created in section [[#spack-env]] can be used to develop software in a simple way that is otherwise independent from Spack itself.  The exact steps depend on the software but in general:
-
-1. Obtain the source tree (eg, via ~git clone~) for the package you will develop.
-2. Configure its build system to search ~/path/to/my-env/.spack-env/view~ for dependencies.
-3. Build your package as usual.
-
-   See section [[#stack-dev]] for a concrete example.
-
-
-** User-installation of Spack packages 
-
-The Spack Environment created in section [[#spack-env]] *must* only ~spack add~ Spack package instances that have already been installed in the base Spack installation.  It is not possible for a user to ~spack install~ novel package instances into these limited Spack Environments.
-
-However, such installation of Spack packages into the user Spack Environment can be supported after we modify the Spack Environment configuration file to point Spack at writable filesystem locations.
-This can be done by editing the ~spack.yaml~ file in the environment directory but more easily it may be done using the provided ~wcwc~ command.
-#+begin_example
-wcwc devenv my-env
-#+end_example
-This command can be used to create the environment or to "upgrade" a previous environment to one from which packages may be installed.  Installation then performed like:
-#+begin_example
-spack env activate my-env
-spack install --add <spec>
-#+end_example
-The ~--add~ will add the resulting package instance to the environment after installation.
-
-
-** Spack develop support
-:PROPERTIES:
-:CUSTOM_ID: spack-develop
-:END:
-
-In section [[#spack-devenv]] we give basics for leveraging a Spack environment to develop some software in a manner that is otherwise not Spack-aware.
-Spack also provides support for  [[https://spack-tutorial.readthedocs.io/en/latest/tutorial_developer_workflows.html#][developing software]] for which Spack does have a package recipe.
-#+begin_example
-$ spack add coreutils
-$ spack concretize
-$ spack develop coreutils@9.4
-$ spack install
-$ echo >> my-env/coreutils/src/false.c
-$ spack install  # rebuilds
-#+end_example
-
-The ~spack install~ acts like a ~make install~ type step though it also includes configuring the local build system.  This makes it somewhat slow to use for extended development sessions.
-
-We may clear out the development package:
-#+begin_example
-$ spack undevelop coreutils
-#+end_example
-
-
-
-* Extended software stacks
-:PROPERTIES:
-:CUSTOM_ID: stacks
-:END:
-
-
-So far, we have made use of the base Spack install.  WCWC provides support for extended software stacks that are on top of this base.  The list of supported stacks is evolving but current as of this writing the stack support status is as follows:
-
-- base :: the stack provided by Spack itself.
-- wirecell :: provides Wire-Cell Toolkit (supported) and Wire-Cell Prototype (tbd) through the [[https://github.com/wirecell/wire-cell-spack][wire-cell-spack]] repo.
-- nusoft :: (tbd) [[https://github.com/NuSoftHEP/nusofthep-spack-recipes][nusoft recipes]] repo provides a base fo FNAL software used by neutrino experiments.
-- art :: (tbd) the [[https://github.com/FNALssi/fnal_art.git][fnal art]] repo with support for /art/ and some other general packages including another packaging for Wire-Cell Toolkit
-- larsoft :: (tbd) [[https://github.com/LArSoft/larsoft-spack-recipes][larsoft recipes]] for building LArSoft.
-- dune :: (tbd) DUNE experiment software on top of /art/ and LArSoft
-- dune :: (tbd) SBND experiment software on top of /art/ and LArSoft  
-
-To use an extended software stack you must tell Spack to consider a corresponding Spack *scope*.  As mentioned in section [[#spack-env]], a scope is a directory holding Spack configuration files that augment configuration provided in other, more general scopes.  WCWC provides a scope for each stack in a predictable location:
-#+begin_example
-/wcwc/spack/<stack>/scope/
-#+end_example
-We can now repeat the previous examples using an extended stack.
-
-** Using individual packages from a stack
-
-In section [[#spack-load]] we used ~spack load~ to configure our shell environment to use a package from the base Spack.  For an extended stack, we repeat the same commands but tell Spack about the stack's scope.
-#+begin_example
-$ source /wcwc/spack/base/repo/share/spack/setup-env.sh
-$ spack --config-scope=/wcwc/spack/wirecell/scope find wire-cell-toolkit
-$ spack --config-scope=/wcwc/spack/wirecell/scope load wire-cell-toolkit
-#+end_example
-
-#+begin_note
-Depending on your shell, it may be critical to use the ~=~ when giving the scope.  See [[https://github.com/spack/spack/issues/41936][Spack issue 41936]].
-#+end_note
-
-** Environments based on a stack
-:PROPERTIES:
-:CUSTOM_ID: stack-env
-:END:
-
-
-In section [[#spack-env]] we constructed Spack Environments that were built on the base Spack.  Here we repeat that example but build the environment on an extended stack.  In this context the stack's scope is called an /upstream/ and we need merely list them in the ~wcwc devenv~ command:
-#+begin_example
-wcwc devenv -U wirecell my-env
-#+end_example
-As before, this command can be run on an existing environment or to create a new one.  We may then activate the environment and ~add~ existing package instances from the extended stack or ~install~ them.
-#+begin_example
-$ spack env activate my-env
-$ spack install --add wire-cell-toolkit
-
-$ which wire-cell
-/path/to/my-env/.spack-env/view/bin/wire-cell
-
-$ wire-cell --help
-...
-#+end_example
-
-** Develop on a stack
-:PROPERTIES:
-:CUSTOM_ID: stack-dev
-:END:
-
-
-In section [[#spack-devenv]] we outlined how to develop software by leveraging an installation in a Spack Environment's view tree.  Using the environment created on the ~wirecell~ stack in section [[#stack-env]] we give a concrete example of configuring the Wire-Cell Toolkit build to do just that:
-#+begin_example
-$ spack env activate my-env  # from before, and see note below
-
-$ git clone git@github.com:wirecell/wire-cell-toolkit.git wct
-$ cd wct/
-$ ./wcb configure --prefix=/path/to/my-env/.spack-env/view/
-$ ./wcb
-#+end_example
-This is a minimal example and more control is likely applied with the various ~--with-*~ options supported by ~wcb~.
-
-#+begin_note
-Some caution is needed with using an instance of the Spack installation of ~wire-cell-toolkit~ that includes dependencies on the ~root~ (ROOT) package.  This package includes defining the ~CC~ and ~CXX~ shell environment variables to the compilers provided by the versions of ~Clang~ internal to ROOT.  Besides causing the development build to use the wrong compilers, they do not behave correctly.  You *must* unset ~CC~ and ~CXX~ after the ~spack activate~. 
-#+end_note
-
-* Spack overview
-:PROPERTIES:
-:CUSTOM_ID: spack
-:END:
-
-
-Above we used the ~spack~ command as a catalyst for configuring our shell environment to use some installed software.  This command is part of the Spack software project which provides a broad set of features related to software management.  In addition to shell configuration,
-Spack is a software "meta build" system.  It automates running the build systems of various software packages, honoring dependencies and organizing the products.  Spack can appear daunting to a new user but once a few of its concepts are understood it becomes approachable.  The concepts are often named and discussed with some ambiguity and so we provide a clear definition of the important ones here:
-
-- package recipe :: A [[https://spack.readthedocs.io/en/latest/packaging_guide.html][recipe]] is a simple Python module found as ~<package>/package.py~ that provides instructions to Spack for how the native build system provided by the package source can be exercised.  Spack may then automatically apply the recipe, along with any build options and dependency constraints to produce a *package instance*.  Ambiguous with *instance*, it is not uncommon for a package recipe to be referred to simply as a "package".
-- package instance :: The collection of files produced by a package installation residing under an *install tree* in an installation *prefix* sub-directory named with a pattern constructed from metadata known as a *projection*.  This allows multiple variant installations of the same package to coexist on disk.  Ambiguous with *recipe*, it is not uncommon for a package instance to be referred to simply as a "package".
-- package repo :: A [[https://spack.readthedocs.io/en/latest/repositories.html][repo]] holds a collection of package recipes along with a ~repo.yaml~ configuration file.  It may be provided as a dedicated git repository.  Spack provides the ~builtins~ repo as part of its overall source tree that currently contains about 8,000 package recipes.  Smaller repos are distributed to build special-purpose portions of a software stack.  One example is [[https://github.com/wirecell/wire-cell-spack][wire-cell-spack]].
-- spec :: A [[https://spack.readthedocs.io/en/latest/basic_usage.html#sec-specs][spec]] describes a *package instance* using a [[https://spack.readthedocs.io/en/latest/spack.html#module-spack.parser][small markup language]].  The simplest and most abstract spec is simply a package name.  To reduce ambiguity, more information can be added including the software version, build variant parameters, compiler and even the specs of dependencies.  From a potentially abstract spec and a set of package recipes, Spack can fully determine the spec including all dependencies in a process call *concretization*.
-- scope :: A [[https://spack.readthedocs.io/en/latest/configuration.html#configuration-scopes][scope]] is directory with Spack configuration files.  Scopes follow an inheritance hierarchy.  This allows defining a scope to override some specific configuration as a particular task may require.  Common parameters that a scope may modify include the location of the install tree or other directories used by Spack or to redefine which repos that Spack should consider.
-- view :: A [[https://spack.readthedocs.io/en/latest/packaging_guide.html#views][view]] is a directory tree with the usual ~{bin/,lib/,include/}~ etc sub-directories that one may expect under, /eg/ the ~/usr/local/~ prefix of Unix convention.  The contents of view represents the union of a number of package *instances* as viewed from their installation *prefix*.  The files from the selected instances are symlinked into the view tree.
-- shell :: Spack has three closely related, easily confused but distinct concepts related to the user shell environment.  First, Spack can modify the user shell environment after the appropriate ~spack-env.*~ script is "sourced".  Then ~spack load <package>~ can apply a Spack [[https://spack.readthedocs.io/en/latest/command_index.html#spack-load][environment module]] further modify the shell environment to use the named package.  A more sophisticated version of this is a Spack [[https://spack.readthedocs.io/en/latest/environments.html][environment]] which combines a *view* and a *scope*.  When an environment is *activated* the user shell environment is modified to make use of the software in the view.  In both cases shell environment is modified to add to standard ~PATH~-like variables and any custom configuration specified in package recipes are applied.
-
-
-With these basic concepts given, the remainder of this section provides guidance and examples for common tasks.
-
-
-** Basics of running Spack
-
-Spack is run from a command named ~spack~.  
-
-
-
-** Spack shell environment
-:PROPERTIES:
-:CUSTOM_ID: spack-env
-:END:
-
-An end-user (not developer) may wish to use Spack Environment Modules to configure their shell environment to use some package.  This is a two step processes.
-
-*** Internalize spack to your shell
-:PROPERTIES:
-:CUSTOM_ID: spackify
-:END:
-
-
-Find the Spack shell "setup" script matching your shell:
-#+begin_example
-ls /wcwc/spack/base/repo/share/spack/setup-env.*
-#+end_example
-Source the one that matches your shell.  The ~wcwc~ command can also help to discover the right script.
-#+begin_example
-wcwc spack-setup
-source `wcwc spack-setup`
-#+end_example
-This causes the ~spack~ command to become a shell function.
-
-To avoid mutating your current shell environment you may wish to start a new one:
-#+begin_example
-bash --rcfile `wcwc spack-setup -s bash`
-#+end_example
-
-*** Loading an environment module
-
-After internalizing Spack environment as in section [[#spackify]] you may further modify your shell environment to make use of various software packages in a piecemeal manner using Spack's support for [[https://modules.readthedocs.io/][Environment Modules]].
-#+begin_example
-$ spack load root
-$ root --version
-ROOT Version: 6.30/06
-Built for linuxx8664gcc on Jun 04 2024, 20:14:19
-From heads/master@tags/v6-30-06
-$ spack unload root
-#+end_example
-
-#+begin_note
-When Spack provides more than one instance of a particular package you must uniquely qualify which to load by providing a more detailed Spack *spec* instead of just a simple package name.  
-
-To discover all installed instances of a package and their qualifiers use, for example the command ~spack find root~.  See the Spack [[https://spack.readthedocs.io/en/latest/basic_usage.html#sec-specs][Basic Usage manual]] and Spack "spec" [[https://spack.readthedocs.io/en/latest/spack.html#module-spack.parser][reference docs]] for more info on how to provide a Spack *spec*.
-#+end_note
-
-** Spack Environments
-:PROPERTIES:
-:CUSTOM_ID: spack-envs
-:END:
-
-[[https://spack.readthedocs.io/en/latest/environments.html][Spack Environments]] provide a persistent and more sophisticated and powerful way to specify your shell environment configuration than do the similarly named Spack Environment Modules.  They come in two types:  "anonymous" (aka "personal") and "managed" (aka "shared").
-
-- anonymous :: User is fully in control of the life cycle from creation to destruction.  User may add packages that have been installed by Spack
-
-
-You the user are fully in control of the life cycle of a personal environment and you may install your own Spack packages in addition to adding 
-
- .  On the other hand, the Spack admin is in charge of the life cycle of managed environments so that users can benefit from sharing a common software stack and be freed from management duties.  A user should prefer using a managed environment unless there are none suitably defined.
-
-The rest of this section describes how to create both types and how to exploit them for using and developing software.  The examples are kept brief by using the ~wcwc~ tool.  For understanding the details of what this tool is doing, see the [[file:wcwc-system.org]] document.
-
-*** Environment creation
-
-A user creates a personal environment and
-
-*** Managed environments
-
-Guidance for an admin to actually create a managed environment is in the [[file:wcwc-system.org]] document.  An end-user can list available managed environments:
-#+begin_example
-
-#+end_example
-
-
-*** Personal environments
-:PROPERTIES:
-:CUSTOM_ID: personal-envs
-:END:
-
-You may create your own Spack Environments and you may use shared Spack Environments provided by your WCWC admin.
-
-Here we will construct and activate a new Spack Environment that is *personal* (not shared).
-#+begin_example
-$ spack env activate --create --dir my-env
-$ echo $SPACK_ENV
-/home/bv/my-env
-#+end_example
-
-#+begin_note
-The ~--dir~ indicates the directory to hold the environment bookkeeping files and it tells Spack that this is a personal environment.
-
-As ~spack env activiate~ modifies your shell environment you must first follow the steps to internalize Spack environment as in section [[#spackify]].
-#+end_note
-
-It is now possible to add *previously installed* packages
-#+begin_example
-$ spack add root
-$ spack concretize
-$ which root
-/home/bv/my-env/.spack-env/view/bin/root
-#+end_example
-
-Later, in a fresh shell, we may reactivate the environment by giving the environment directory that was previously created:
-#+begin_example
-$ spack env activate my-env
-$ which root
-/home/bv/my-env/.spack-env/view/bin/root
-#+end_example
-
-
-*** Environments and chaining for user installation
-:PROPERTIES:
-:CUSTOM_ID: user-install-area
-:END:
-
-
-Spack supports "chaining" Spack installations.  A user can employ this feature to install packages that do not exist in the main Spack installation area.  To enable this, modify the ~spack.yaml~ file created in the Spack Environment directory to add ~config~ and ~upstreams~ entry like:
-
-#+begin_src yaml
-spack:
-  config:
-    install_tree:
-      root: /home/rootless/junk/my-env/install
-    build_stage:
-      - /home/rootless/junk/my-env/stage
-    source_cache: /home/rootless/junk/my-env/cache
-  upstreams:
-    base:
-      install_tree: /srv/bv/wcwc/spack/base/install
-#+end_src
-#+begin_note
-You will see other entries in the environment's ~spack.yaml~ which were added by ~spack~.  In particular the ~specs~ list will be filled with any package specs named with ~spack add~
-#+end_note
-
-You can now install packages and add them to the environment.  For example:
-#+begin_example
-spack install --add jsonnet
-#+end_example
-
-
-*** Chaining for WCWC software stacks
-
-The WCWC Spack packaging is composed of different Spack "repos".  Each provides packaging for a portion of an overall stack.  Each repo is configured to have its own installation area via a Spack /scope/.  If one repo depends on another it is chained via Spack /upstreams/ mechanism in order to satisfy dependencies.  We saw this same upstream chaining above when configuring the environment with its own ~install_area~.  There, the upstreams consisted of just the "base" installation.
-
-The environment can be constructed on a particular portion the software stack.  For example:
-#+begin_example
-spack env deactivate   # if needed to exit a prior environment
-spack env activate --create --dir my-env-wct
-#+end_example
-
-In ~spack.yaml~ we must list the full upstream chain.
-#+begin_src yaml
-spack:
-  upstreams:
-    wirecell:
-      install_tree: /wcwc/spack/wirecell/install
-    base:
-      install_tree: /wcwc/spack/base/install
-  repos:
-  - /wcwc/spack/wirecell/repo
-#+end_src
-We can then (fake) "install" and add packages provided by the upstream:
-#+begin_example
-spack install --add wire-cell-toolkit
-#+end_example
-To install novel package instance not provided by the upstreams, set the other ~config~ items as described in section [[#user-install-area]].
-
-
-*** Shared environments
-:PROPERTIES:
-:CUSTOM_ID: shared-envs
-:END:
-
-The WCWC admin may define named environments that reside in the central Spack installation area and which may shared by many users.  You may list the names of the available shared environments:
-#+begin_example
-$ spack env list
-==> 1 environments
-    wct_0-28-0_glpk-hdf-root
-#+end_example
-You may activate a shared environment similar to a personal environment by giving its name instead of a directory:
-#+begin_example
-$ spack env activate wct_0-28-0_glpk-hdf-root
-$ echo $SPACK_ENV
-/wcwc/spack/local/var/spack/environments/wct_0-28-0_glpk-hdf-root
-$ which root
-/wcwc/spack/local/var/spack/environments/wct_0-28-0_glpk-hdf-root/.spack-env/view/bin/root
-#+end_example
-
-#+begin_note
-Shared environments can be useful for end users but their *view* directory is not writable.  A user can not modify shared environments.
-#+end_note
-
-* Going further
-:PROPERTIES:
-:CUSTOM_ID: further
-:END:
-
-A Spack Environment can be used to provide a basis for software development as its *view* directory, ie  ~$SPACK_ENV/.spack-env/view~, acts similarly to the traditional Unix ~/usr~ or ~/usr/local~ prefix.  To build a software package under development you may provide this prefix or in many cases rely on packages to be found via ~PKG_CONFIG_PATH~ and ~CMAKE_PREFIX_PATH~ that are set by the Spack Environment activation. 
-
-** Access
-:PROPERTIES:
-:CUSTOM_ID: logging-in
-:END:
-
-WCWC users may access WCWC workstations in a number of ways.
-
-*** Local workstation access
-
-*Primary local access* is when you log in to your own workstation through its "console" (be it the GDM or other display manager or to the TTY).  Access requires password authentication and it is performed by the local system and does not utilize IDM (see section [[#freeipa]]).   
-
-*Secondary local access* is when you log in to the "console" of another workstation on which your user is not primary.  This access requires you to supply a password that is authenticated by IDM.
-This mode is not expected to be commonly exercised.  Contact the WCWC admin about accommodating it.
-
-To reduce password proliferation, BNL WCWC may coalesce these two types of access in the future by using only IDM password authentication for any type of local access.
-
-*** Intra-WCWC remote access
-:PROPERTIES:
-:CUSTOM_ID: intra-ssh
-:END:
-
-
-You may access other WCWC workstations from your own WCWC workstation via SSH authenticated with keys.  Here describes one way to achieve this but users are free to pursue other preferred methods.  First, on a WCWC workstation, if you do not yet have =~/.ssh/id_rsa.pub= or other SSH key, make one:
-
-#+begin_example
-$ ssh-keygen
-Generating public/private rsa key pair.
-Enter file in which to save the key (/home/user/.ssh/id_rsa): 
-Enter passphrase (empty for no passphrase): 
-Enter same passphrase again: 
-Your identification has been saved in /home/user/.ssh/id_rsa
-Your public key has been saved in /home/user/.ssh/id_rsa.pub
-#+end_example
-Per BNL, requirements you *must* provide a passphrase.  Do *not* leave it empty.
-
-You may authorize yourself to log in other WCWC workstations (or any that NFS-mount your ~$HOME~) by appending your *public* key file contents as:
-#+begin_example
-$ cat ~/.ssh/id_rsa.pub >> ~/.ssh/authorized_keys
-#+end_example
-
-*** External remote access
-:PROPERTIES:
-:CUSTOM_ID: external-ssh
-:END:
-
-
-You may access WCWC workstations from an external computer such as a non-WCWC computer on the WCWC lan or one on a network separated from the WCWC LAN by a firewall.  In this latter case, access to an SSH "gateway" account may be required prior to continuing on to a WCWC account.   Contact your WCWC admin for details on how to acquire such an account.  To make the hop through the gateway transparent you may edit your local =~/.ssh/config= to include a stanza like:
-
-#+begin_example
-Host mywcwc
-     ControlMaster auto
-     ControlPath ~/.ssh/%r@%h:%p
-     ControlPersist 10m
-     ForwardAgent yes
-     ForwardX11 yes
-     HostKeyAlias mywcwc
-     Hostname mywcwc.phy.bnl.gov
-     PreferredAuthentications publickey
-     ProxyCommand ssh -A -Y -X myuser@physsh.phy.bnl.gov -W %h:%p
-     ServerAliveInterval 60
-     ServerAliveCountMax 120
-     User myuser 
-#+end_example
-Here, we assume a user account ~myuser~ on BNL WCWC and BNL Physics department SSH gateway and a WCWC workstation ~mywcwc~.
-The *local* SSH public key (ie, the one on your *local, external* computer) must be entered into the IDM by the WCWC admin.
-
-After this external remote access provides you a shell on a WCWC workstation you may wish to further continue your SSH connection to another WCWC workstation.  This requires your *remote* SSH key (ie, one made by your WCWC account) to be authorized as described in section [[#intra-ssh]].  Alternatively, you may find it more convenient to rely on an ~ssh-agent~ to forward your external key that you used to access the SSH gateway to each leg of your SSH connection chain.  To do that, starting on your *local, external* computer,
-#+begin_example
-$ ssh-add
-#+end_example
-Type your passphrase.  Again, a passphrase is *required*.  If your key do not have a passphrase, *immediately* add one (and remember it):
-#+begin_example
-$ ssh-keygen -p
-#+end_example
-Using =~/.ssh/config= as above, you may now SSH as normal
-#+begin_example
-$ ssh mywcwc
-$ ssh otherwcwc
-#+end_example
-Or, take each step manually and instruct SSH to forward the agent with ~-A~:
-#+begin_example
-$ ssh -A myuser@physsh.phy.bnl.gov
-$ ssh -A mywcwc
-$ ssh otherwcwc
-#+end_example
-
-
-
-** Spack views
-:PROPERTIES:
-:CUSTOM_ID: view
-:END:
-
-In section [[#spack-env]] a Spack Environment was introduced as a way to make a durable user environment and in section [[#spack-devenv]] a Spack Environment is used for development.  The kernel of a Spack Environment is a Spack View and it can be used directly to provide a "light-weight" form environment that gives more control to the user/developer.
-
-A view aggregates package instances via the file system to that they appear to be installed in a single ~/usr/local~-style tree.  Some reasons you may prefer a View over an Environment is for their simplicity, to put more control (and responsibility) into your hands or to avoid global modification to your shell environment.  Using a Spack View is also limiting.  While you will be able to "add" existing package instances to a view (and that's about all you can do) you will not be able to ~spack install~ novel packages into the view.  A *view* also has no Spack *scope* and so no way to override ~spack~ configuration. Of course, you can create your own scope but that step quickly takes you back to the pattern followed by Spack Environment and you are likely best off using that.
-
-There are no requirements to modify your shell environment to create and use views.  You may even avoid basic shell environment (section [[#spack-shell]]) at the expense of using the full path to the ~spack~ program.
-You make a view by adding package instances:
-
-#+begin_example
-$ /wcwc/spack/base/repo/bin/spack \
-  --config-scope=/wcwc/spack/wirecell/scope \
-  view add -i my-view wire-cell-toolkit
-
-$ ls -l my-view/bin/wire-cell 
-lrwxrwxrwx 1 bv bv 141 Jul 10 15:22 my-view/bin/wire-cell -> /wcwc/spack/wirecell/install/linux-debian12-haswell/gcc-12.2.0/wire-cell-toolkit-0.28.0-rpjtpyms7morqmfi5zym5l7ftbwsnn7q/bin/wire-cell
-#+end_example
-
-View has one more trick.  If your desire is to use the view tree as a basis for development of a particular package, and Spack knows how to build that package, you may wish to provide all dependencies for that package but exclude the package itself.  This can be done like:
-
-#+begin_example
-$ rm -rf my-view
-
-$ /wcwc/spack/base/repo/bin/spack \
-  --config-scope=/wcwc/spack/wirecell/scope \
-  view -e wire-cell-toolkit add -i my-view wire-cell-toolkit
-
-$ ls -l my-view/bin/wire-cell
-ls: cannot access 'my-view/bin/wire-cell': No such file or directory
-
-$ ls -l my-view/lib/libspdlog.so
-lrwxrwxrwx 1 bv bv 129 Jul 10 15:24 my-view/lib/libspdlog.so -> /wcwc/spack/base/install/linux-debian12-haswell/gcc-12.2.0/spdlog-1.13.0-ja5i24ki6bu4lq3c262jjqpqvwrlr47q/lib/libspdlog.so
-#+end_example
-
-** Using ~direnv~
-:PROPERTIES:
-:CUSTOM_ID: direnv
-:END:
-
-A Spack View does not require any special shell environment, nevertheless one often benefits from packing some information into the environment.  This can be done with a Spack Environment (section [[#spack-env]]) while [[https://direnv.net/][direnv]] provides an alternative that keeps much of the automation of a Spack Environment but gives the user, especially a developer, more control.  Unlike a Spack Environment, ~direnv~ ties the application of shell environment settings to a directory.  One ~cd~'s into a ~direnv~ controlled directory and the shell is automatically configured.  When one ~cd~'s out, the configuration is removed.
-See direnv's excellent documentation for more information and below are some examples applicable to WCWC.
-
-*** Develop with direnv
-:PROPERTIES:
-:CUSTOM_ID: direnv-dev
-:END:
-
-A view tree, be it bare as in section [[#view]] or part of a Spack Environment, can be easily used from a direnv ~.envrc~ file.  A particularly useful pattern is to place a view one level under where ~.envrc~ resides to give room for source, build trees, etc.
-#+begin_example
-$ /wcwc/spack/base/repo/bin/spack \
-  --config-scope=/wcwc/spack/wirecell/scope \
-  view -e wire-cell-toolki add -i my-work/view wire-cell-toolkit
-
-$ git clone git@github.com:wirecell/wire-cell-toolkit.git my-work/toolkit
-$ git clone git@github.com:wirecell/wire-cell-python.git  my-work/python
-
-$ cat << EOF > my-work/.envrc
-layout python
-load_prefix \$PWD/view
-# load_prefix misses this?
-PKG_CONFIG_PATH="\$PKG_CONFIG_PATH:\$PWD/view/share/pkgconfig"
-EOF
-
-$ cd my-work
-$ direnv allow
-
-$ cd python
-$ pip install -e .
-$ cd ..
-
-$ cd toolkit
-$ ./wcb configure --prefix=$DIRENV_DIR/view
-$ ./wcb
-$ ./wcb install
-#+end_example
-Likely you will wish to further control ~wcb~ with some number of ~--with-*~ flags.  This uses a trick to install the build products right into the view.  This makes a view a mix of symlinks and real files, but it works just fine.  It is also useful to elide the ~wcb install~ and run the build products in-place under ~build/~ by adding some more lines to ~.envrc~ like:
-
-#+begin_example
-export BATS_LIB_PATH=$PWD/toolkit/test
-PATH_add $PWD/toolkit/test/bats/bin
-PATH_add $PWD/toolkit/build/apps
-path_add LD_LIBRARY_PATH $PWD/toolkit/build/{apps,aux,cuda,gen,iface,img,pgraph,sig,sigproc,sio,tbb,util,root,clus}
-#+end_example
-
-Revisiting this project in the future requires simply:
-#+begin_example
-$ cd my-work
-#+end_example
-See the direnv documentation for all the useful tricks you can do in an ~.envrc~ file.  
-
-*** The ~wcwc~ package with direnv
-:PROPERTIES:
-:CUSTOM_ID: direnv-wcwc
-:END:
-
-The ~wcwc~ package provides the ~wcwc~ command and Ansible recipes.  Both rely on OS level packages.  Additional environment setting is provided to direnv-enabled shells with the included ~wcwc/.envrc~ file.
-
- is from a direnv shell.  Initial installation is as follows:
-#+begin_example
-git clone git@github.com:brettviren/wcwc.git
-cd wcwc
-direnv allow
-
-wcwc --help
-#+end_example
-Subsequent use requires merely
-#+begin_example
-cd wcwc
-#+end_example
-
-
-
-
-* Administration
-:PROPERTIES:
-:CUSTOM_ID: sysadmin
-:END:
-
-This section describes the steps to integrate a workstation into WCWC, elaborating on section [[#enroll]].
-
-** Supported operating system
-
-A WCWC workstation must run a supported operating system in order to reduce the variety that the WCWC admin must cope with.   The single choice currently is Debian "stable".  This was chosen for several reasons:
-
-- Debian gives reasonably long life for each release.
-- Eventual upgrades can be done in-place.
-- Debian is well suited for scientific workstations due to its huge wealth of packages including those specific to scientific application (unlike eg RHEL based systems).
-
-The workstation owner is encouraged to install the Debian "stable" distribution on their own.  However, the WCWC admin can provide assistance.
-
-** Canonical primary user information
-:PROPERTIES:
-:CUSTOM_ID: user-ids
-:END:
-
-
-To reduce some technical complexities, a WCWC user is required to have a unique user identifier (UID) that is used across all workstations in the WCWC.  If the user has (or had) a BNL "life" number, it should be used as the UID.  If a user has only a BNL guest ID then a UID is constructed from the guest ID.  These are of the form a letter followed by four numbers: LNNNN.  A UID should be formed as: [L - "A" + 1]0NNNN.  
-
-If the OS is newly installed, this UID convention can be followed when creating the account for the primary user.  In most cases, a potential WCWC workstation will already has a primary user with a nominal UID (usually 1000 or 1001).  To convert to the new user and group IDs run the following as root:
-
-#+begin_example
-  groupmod -g NEWGID GROUPNAME  
-  usermod  -g NEWGID -u NEWUID USERNAME
-#+end_example
-The ~usermod~ command will change permissions in the user's ~$HOME~ but not elsewhere.  To list top-level directories owned by the old user ID run:
-
-#+begin_example
-  find / -type d -user OLDUID -prune 2>/dev/null
-#+end_example
-One may then change ownership for each directory listed.
-#+begin_example
-  chown --from=CURRENT_OWNER:CURRENT_GROUP -R NEW_OWNER:NEW_GROUP DIRECTORY
-#+end_example
-
-This must be performed for the primary user and any other local users that will be members of WCWC.  By "local user" we mean the user local to the workstation that physically provides that user's ~$HOME~.
-** Physics IDM
-:PROPERTIES:
-:CUSTOM_ID: freeipa
-:END:
-
-The BNL physics department maintains an identity management system (IDM) based on FreeIPA.  It is used in the BNL WCWC to manage user accounts and NFS automounting.  The enrollment is partly manual and partly automated and handled by the WCWC admin.
-
-*** Basic enrollment
-:PROPERTIES:
-:CUSTOM_ID: freeipa-enroll
-:END:
-
-#+begin_example
-  # apt install freeipa-client
-  # hostname
-  # ipa-client-install \
-    --server=idm3.phy.bnl.gov \
-    --server=idm2.phy.bnl.gov \
-    --server=idm1.phy.bnl.gov \
-    --server=idm.phy.bnl.gov \
-    --domain=phy.bnl.gov
-  # ipa-client-automount --server=idm.phy.bnl.gov --location=wcwc-u
-#+end_example
-Make sure ~hostname~ returns a FQDN.  If not, set it with ~hostname~ and update ~/etc/hostname~ for after later reboots.  This requires the user/pass of a FreeIPA account that is authorized to enroll computers.
-
-The workstation host and all its local users then requires some settings in FreeIPA:
-
-*** Add the host
-:PROPERTIES:
-:CUSTOM_ID: freeipa-add-host
-:END:
-
-
-1. ~Identity~ -> ~Hosts~ -> ~hostname.phy.bnl.gov~.
-2. Add primary owner's real name and other general info about the workstation in description and SAVE.
-3. In the ~Host Groups~ tab, ~+Add~, add the host to the group ~wcwc-workstations~.
-
-*** Add primary user
-:PROPERTIES:
-:CUSTOM_ID: freeipa-add-user
-:END:
-
-A local user of the workstation will already have a Physics IDM account if they have a Physics SSH gateway account.   If they do not have an account they must request one from: https://www.phy.bnl.gov/Accounts/.
-
-#+begin_note
-The local and IDM user names must match.  If a mismatch occurs, either a new local or a new IDM account is needed or one of them must be renamed.
-#+end_note
-
-Given the ~username~ in FreeIPA:
-
-1. ~Identity~ -> ~Users~ -> ~username~
-2. ~User Groups~, ~+Add~ and add to ~wcwc~.
-   
-The ~$HOME~ provided by the workstation for a local user which is NFS-mounted to other WCWC workstations.  A map the combines ~workstation~ and ~username~ information is updated with:
-
-1. ~Network services~ -> ~Automount~ -> ~wcwc-u~ -> ~auto.u~ -> ~+Add~
-2. The ~Key~ is the username
-3. the ~Mount information~ is as follows, replacing ~WORKSTATION~ with the fully-qualified name of the workstation
-
-#+begin_example
--fstype=nfs4 -sync,rw,soft,sec=sys,proto=tcp,port=2049 WORKSTATION:/home/&
-#+end_example
-
-Internally, FreeIPA assigns large user (and group) ID numbers while we wish to keep the BNL "life" number used at the OS level.  To allow this an "ID View" is needed for each user:
-
-1. ~Identity~ -> ~ID Views~ -> ~wcwc~ -> ~+Add~ 
-2. Fill in the user name and matching user login, desired UID matching GID, shell and home directory (~/home/USER~).
-3. SAVE
-See sections [[#user-ids]] and [[#home-dirs]] for more info on user IDs and home directories.  
-
-*** One time setup
-:PROPERTIES:
-:CUSTOM_ID: freeipa-one-time
-:END:
-
-The above assumes a one-time setup has been done as described in this section.  First, make the ~wcwc~ user group:
-
-1. ~Identity~ -> ~Groups~ -> ~User Groups~ and make ~wcwc~
-2. Add any initially known users.
-
-Then, the ~wcwc-workstations~ host group:
-
-1. ~Identity~ -> ~Groups~ -> ~Host Groups~ and make  ~wcwc-workstations~
-2. Add any initially known hosts
-
-Host-based access control (HBAC) brings users to hosts and ~wcwcws~ is the name:
-
-1. ~Policy~ -> ~HBAC~ -> ~+Add~ and make ~wcwcws~
-2. Visit ~wcwcws~,
-   - add the ~wcwc~ User Group,
-   - add the ~wcwc-workstations~ Host Group
-   - add HBAC services: (gdm, login and ssh).
-
-Automounting is handled as a network service "location"
-
-1. ~Network services~ -> ~Automount~ -> ~+Add~ and make ~wcwc-u~
-2. Visit ~wcwc-u~ and  ~+Add~ an ~auto.u~
-3. Click ~auto.master~ and +Add key with ~/u~ and ~auto.u~.
-See above for entries that go in ~auto.u~.
-
-ID views allow remapping UID and other things.
-1. ~Identity~ -> ~ID Views~ -> ~+Add~ and make ~wcwc~
-Add ID View entries as described above.
-
-*** Home directories
-:PROPERTIES:
-:CUSTOM_ID: home-dirs
-:END:
-
-WCWC relies on ~autofs~ to automount user ~$HOME~ (and ~/wcwc~) directories.  ~$HOME~ will be NFS-mounted on all WCWC workstations except for the single workstation on which the user is a "primary" user (ie, the workstation that provides the user's home disk) where it will be a direct (or bind) mount.  In order to handle this heterogeneous mounting pattern given ~autofs~ restrictions several bits of information must be combined on a per-workstation basis:
-
-- The directory ~/nfs/home/$USER~ exists only on a workstation where a user is a "primary" (ie, that workstation provides the user's physical home directory).  It should be made permanent in ~fstab~ and NFS-exported as ~/home/$USER~.
-- The set of pairs of NFS server name and ~/home/$USER~ are maintained in an ~autofs~ map in IDM.
-- The ~autofs~ on every workstation (even where a user is primary) mounts ~/u/$USER~.
-- An ~autofs~ "program" (shell script) type map is used for ~/home~.  It dynamically resolves a ~$USER~ to ~/nfs/home/$USER~ if that path exists, else it resolves ~/u/$USER~.
-
-
-
-
-
-** Ansible setup
-:PROPERTIES:
-:CUSTOM_ID: ansible
-:END:
-
-See [[https://docs.ansible.com/][Ansible docs]] for details on Ansible.  Here we give the highlights.  We refer to ~admin~ as a user on an Ansible [[https://docs.ansible.com/ansible/latest/getting_started/][control node]].  It is ~admin~ that runs Ansible commands and must be able to login as user ~root~ to every target machine via keys.
-
-*** Inventory
-
-Add hosts to ~wcwc/ansible/inventory.yml~
-#+begin_example
-workstations:
-  hosts:
-    hierocles.phy.bnl.gov:
-    heracles.phy.bnl.gov:
-    aswork.phy.bnl.gov:
-    # ....
-#+end_example
-The host name should be given fully qualified.
-
-Then check inventory and connectivity:
-#+begin_example
-ansible-inventory --list
-ansible-inventory --host hierocles.bnl
-ansible workstations -m ping -l hierocles.phy.bnl.gov
-#+end_example
-All commands should succeed.
-
-*** Running a play
-
-An ansible "playbook" applies OS configurations.  One may limit the play to just a newly added workstation with ~-l hostname~.  The main play for workstations can be run as:
-#+begin_example
-  $ cd wcwc/
-  $ ansible-playbook -l 'heracles.phy.bnl.gov' ansible/playbooks/wcwc-workstation.yml 
-#+end_example
-
-
-
 
 * Nuts and bolts
 :PROPERTIES:
 :CUSTOM_ID: nabs
 :END:
 
-This section is not intended for "normal" users but for "expert" users, WCWC administrators or just anyone that wants to understand how WCWC works in more detail.
-
-** Ways to get the software
-
-This section gives details on how workstations may be configured to get the ~/wcwc~ software area.
-
-*** NFS client
-:PROPERTIES:
-:CUSTOM_ID: nfs-client
-:END:
-
-WCWC workstations sharing a LAN are best provided software under ~/wcwc~ via an NFS-mount.  The NFS server may be an otherwise "normal" WCWC workstation or it may be held special.
-
-To configure a workstation as an NFS client for the BNL WCWC run this as root:
-#+begin_example
-cat << EOF >> /etc/fstab
-lycastus.phy.bnl.gov:/wcwc /wcwc nfs4 _netdev,auto  0  0
-EOF
-
-mount /wcwc
-#+end_example
-The ~lycastus~ host is relevant only on the BNL campus network.
-
-*** Copy client
-:PROPERTIES:
-:CUSTOM_ID: copy-client
-:END:
-
-A workstation can instead provide ~/wcwc~ by periodically synchronizing this directory from some other workstation that provides the ~/wcwc~ directory.   This can be preferred for home workstation or laptop use as these generally may not mount remote NFS.
-
-When a copy of ~/wcwc~ is made, it becomes fully "owned" by the user.   The user is free modify its contents as desired.  However, it is recommended that the user resist this temptation and create a special user dedicated to only performing the copy so that "normal" users can rely on ~/wcwc~ being safely read-only.  It is recommended to, as user ~root~, create the special user ~wcwc~ and make ~/wcwc~ with proper ownership:
-#+begin_example
-useradd -c 'Wire-Cell Workstation Cluster User' -d /home/wcwc -m -s /bin/bash wcwc
-mkdir /wcwc
-chown wcwc:wcwc /wcwc
-#+end_example
-You are free to copy files how you wish.  Use of ~rsync~ over ~ssh~ is recommended and the =~wcwc/.ssh/config= can be filled as described in section [[#external-ssh]] and the SSH keys of a "normal" can be used:
-
-#+begin_example
-wcwcuser$ ssh -A wcwc@localhost
-wcwc$ ssh-add -l
-#+end_example
-With a loaded and forwarded agent, ~wcwc~ can access WCWC workstations using the keys of the original ~wcwcuser~ and 
-periodically run this ~rsync~ command to synchronize ~/wcwc~:
-#+begin_example
-$ rsync --del --archive hierocles.bnl:/wcwc/ /wcwc/
-#+end_example
-
-#+begin_note
-Including the trailing ~/~ in the source part is important.  The ~--del~ will cause the absence of any files in the source to be reflected in the destination.
-#+end_note
-
-*** Building from scratch
-:PROPERTIES:
-:CUSTOM_ID: build-it
-:END:
-
-The ~/wcwc~ directory, or indeed any location, can be populated from a green field replicating the steps used to produce the ~/wcwc~ directory on a "real" WCWC NFS server.  Start with a supported OS, install some packages and create a dedicated ~wcwc~ user:
-
-#+begin_example
-$ apt install build-essential ca-certificates coreutils curl environment-modules \
-  gfortran git gpg lsb-release python3 python3-distutils python3-venv unzip zip
-
-$ useradd -c 'Wire-Cell Workstation Cluster User' -d /home/wcwc -m -s /bin/bash wcwc
-$ mkdir /wcwc
-#+end_example
-
-The heavy lifting is done by the ~wcwc~ program.  The base Spack can be installed with
-#+begin_example
-$ wcwc install-stack
-#+end_example
-This will install into ~/wcwc~.   An alternative location can be given
-#+begin_example
-$ wcwc --prefix /srv/wcwc install-stack
-#+end_example
-Or, the ~WCWC_PREFIX~ shell environment variable may be set.
-
-By default the ~wcwc install-stack~ command will install the base Spack support.  To install other stacks, simply name them.
-#+begin_example
-$ wcwc install-stack wirecell
-#+end_example
-The known stacks name "upstream" stacks on which they depend.  This dependency tree can be walked to recursively install the target stack and any dependencies.
-#+begin_example
-$ wcwc install-stack -r wirecell 
-#+end_example
-If a stack is unknown to ~wcwc~ it can be specified.  See ~wcwc install-stack --help~.
-
-The result will be WCWC software area but currently with no actual packages installed.
-
-
-** Ways to provide the software
-
-*** NFS Server
-:PROPERTIES:
-:CUSTOM_ID: nfs-server
-:END:
-
-The primary distribution mechanism for the ~/wcwc~ area to a LAN is simple NFS.  
-The following is needed to configure a WCWC workstation with this role:
-#+begin_example
-apt install nfs-kernel-server 
-
-useradd -c 'Wire-Cell Workstation Cluster User' -d /home/wcwc -m -s /bin/bash wcwc
-mkdir -p /nfs/ro/wcwc
-
-cat << EOF >> /etc/fstab
-/data1/wcwc /wcwc        none bind,uid=1001
-/data1/wcwc /nfs/ro/wcwc none bind,uid=1001
-EOF
-
-# one time
-mount /wcwc
-mount /nfs/ro/wcwc
-
-cat << EOF >> /etc/exports
-/nfs		130.199.22.0/23(ro,sync,crossmnt,no_subtree_check,fsid=0)
-/nfs/ro/wcwc	130.199.22.0/23(ro,sync,no_subtree_check)
-EOF
-
-exportfs -a
-showmount -e
-#+end_example
-
-The bind mount on ~/nfs~ are to satisfy certain NFS requirements and on ~/wcwc~ to provide a the canonical location when the root file system is too small to host software build products.   The IP addresses are examples relevant to the BNL campus network.
-
-Once a ~/wcwc~ is available, see section [[#build-it]] to intialize it with Spack stacks and section [[#installing-packages]] for populate ~/wcwc~ with package instances.
-
-*** Installing packages
-:PROPERTIES:
-:CUSTOM_ID: installing-packages
-:END:
-
-The WCWC Spack area is a little non-standard in that it is partitioned into "stacks".  Each stack exists under
-
-#+begin_example
-/wcwc/spack/<stack>/{environments,install,repo,scope}/
-#+end_example
-
-The ~base~ stack is Spack itself.  It's source resides under ~base/repo/~ and thus its actual Spack package repository is deeper under ~base/repo/var/spack/repos/builtin~.  The other stacks have their Spack package repository directly under ~<stack>/repo/~.
-
-When installing packages, the WCWC admin must take care to do so "in" the ~<stack>/scope/~ that provides the Spack package that is being installed.
-
-It is possible to install packages directly with the ~spack~ command but doing installations through ~wcwc~ can help to avoid shell environment configuration, more easily refer to a scope and support non-standard ~/wcwc~ locations.  To deal with non-standard locations:
-#+begin_example
-$ export WCWC_PREFIX=/path/to/nonstandard/wcwc  # not needed if using /wcwc
-$ alias wcwc /path/to/wcwc/scripts/wcwc         # or add to your PATH
-#+end_example
-
-To install to base stack.
-#+begin_example
-wcwc spack install zlib
-#+end_example
-To install to extended stack
-#+begin_example
-$ wcwc spack install --stack wirecell wire-cell-toolkit
-#+end_example
-
-*** Build and NFS on separate servers
-
-Nominally, Spack installs are performed on the NFS server where ~/wcwc~ is local and read-write.  That host may be under-powered. If a powerful host is available to perform package installation, but which should not be the NFS server, one may of course modify the NFS-export options described in section [[#nfs-server]] to allow read-write mount. Alternatively, one may ~rsync~ as described in section [[#copy-client]] but omit ~--del~ to first populate ~/wcwc~ on the powerful host, then perform a number of package installations, and finally ~rsync~ the changes back to the NFS server.  This mode will also benefit use of the software on the powerful host as local disk will be faster than NFS.
-
-
-*** Defining managed environments
-:PROPERTIES:
-:CUSTOM_ID: managed-env
-:END:
-
-
-TBD.
-
-*** Containers
-
-TBD.
+Here we describe how various ~wcwc~ commands work including give Spack-level equivalents where they exist.
