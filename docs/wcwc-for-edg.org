@@ -1,0 +1,402 @@
+#+title: Wire-Cell Workstation Cluster (WCWC)
+#+setupfile: ~/sync/talks/setup.org
+
+* meta :noexport:
+
+#+begin_src sh :results output drawer
+scp wcwc-for-edg.pdf hierocles.bnl:public_html/wire-cell/docs/
+#+end_src
+
+#+RESULTS:
+:results:
+:end:
+
+
+* Topics
+
+- The WCWC concept.
+- It's implementation and status at BNL.
+- Technical tour of commands for users / developers / admins.
+  - Includes some very basic intro to Spack 
+
+* Origin story
+
+Initially we wanted to
+- Make it easier to use and share built *software*...
+
+- Make it easier to use and share workstation *hardware*...
+
+- ...for EDG *Wire-Cell* people, especially new comers.
+
+\vfill
+
+
+That led to a solution that takes the name:
+
+\vspace{5mm}
+
+\LARGE
+#+begin_quote
+Wire-Cell Workstation Cluster (WCWC)
+#+end_quote
+\normalsize
+\vfill
+
+*However*, the resulting solution is actually *very general* and others may benefit:
+- Non-WC EDG'ers and non-EDG WC'ers and non-EDG/non-WC'ers.
+- Users of a *cluster* of workstation or of an *individual* workstation/laptop.
+
+* WCWC Overview
+
+** Hardware
+
+- Bring what you have, especially if it has GPU.
+- Laptops and home computers also can participate.
+
+** OS level just for *BNL WCWC* (optional/similar for other WCWC's)
+
+- Install Debian 12, integrate into Physics department's FreeIPA IDM.
+- User needs Physics SSH gateway (IDM) account and change local user ID to be unique.
+- Give WCWC admin (me!) root SSH access to finish.  I can also help with the above.
+
+** Software
+
+- A *large, common and shared* area of *Spack*-managed software in ~/wcwc~.
+- Wire-Cell Toolkit and Prototype releases (/art/ + LArSoft coming).
+ - Non-LArTPC software may also be provided (Spack packaging is required).
+- *Made simple* with the \textbf{wcwc} command for many user/developer/admin tasks.
+
+* Supported OS(es)
+
+** BNL WCWC 
+
+Limited to Debian 12 aka "stable" aka "bookworm".
+- Ubuntu users need to upgrade but after that you will feel at home.
+- Currently, no plan to support RHEL or its derivatives.
+
+** Other WCWCes
+
+Use Debian 12 and things should Just Work for you.
+- Other Linux distributions (perhaps even Mac) might work (or not).
+- Up to you to support other OSes, but I will try to help.
+
+* BNL WCWC: founding and potential future members
+
+
+| host      | owner    | GPU               | CPU | Comment          |
+|-----------+----------+-------------------+-----+------------------|
+| lycastus  | Brett    | -                 |   8 | s/w server       |
+|-----------+----------+-------------------+-----+------------------|
+| hierocles | Brett    | GTX 1060 6GB      |  40 | member           |
+| heracles  | Yousen   | *RTX 4070 Ti 12GB*  |  32 | member           |
+| aswork    | Jay      | GTX 1660 Ti 6GB   |  20 | member           |
+|-----------+----------+-------------------+-----+------------------|
+| *wcgpu0*    | Brett    | *2x RTX 4090 24 GB* |  64 | arrive today?    |
+| *wcgpu1*    | Brett    | *2x RTX 4090 24 GB* |  64 | arrive today?    |
+|-----------+----------+-------------------+-----+------------------|
+| haiku     | Brett    | GTX 750 Ti        |   8 | home workstation |
+|-----------+----------+-------------------+-----+------------------|
+|-----------+----------+-------------------+-----+------------------|
+| nitish    | Nitish   | *RTX 3080  10GB*    |  ?? | needs new PS     |
+| xqian     | Xin      | GTX 1050 Ti 4GB   |  12 | pending ana      |
+| apollo    | Wenqiang | GTX 1050 Ti 4GB   |   8 | pending ana      |
+| twister   | Chao     | GTX 1650  4GB     |   8 | pending ana      |
+| kratos    | Haiwang  | *RTX 2080 Ti 11GB*  |   8 | pending ana      |
+|-----------+----------+-------------------+-----+------------------|
+| milind1   | Milind   | ??                |  ?? | non-WC           |
+| milind2   | Milind   | ??                |  ?? | non-WC           |
+|-----------+----------+-------------------+-----+------------------|
+
+* Aside: *wcgpu[01]* - two new WC dual-GPU workstations
+
+Successful short-term / small BNL program development proposal from Kirby+Viren.
+- "Enable development of novel Wire-Cell AI/ML and GPU acceleration."
+- Demonstrate performance using existing DNN-ROI and write a whitepaper.
+
+Long term use of WC GPU workstations:
+- Ad-hoc, informal and dedicated use by individual exploring some new idea.
+  - Understand and improve WCT scaling-up to multi-GPU / multi-computer.
+  - Developing new AI/ML (DNN-ROI+Charge, cluster heuristic replacements).
+  - Inform Prompt Signal Processing development and future funding proposals.
+  - New ideas!
+
+Etc:
+- Shipped last week, should arrive today.
+- Likely placed in either $\nu$ or $\mu$ visitor rooms or in 1-89 as 2nd choice.
+- Integrated in to BNL WCWC like any "normal" workstations but headless.
+- The pair will be conected by a 10 Gbps point-to-point Ethernet.
+
+* WCWC on laptop, home workstation and clusters at other institutions
+
+May use local account management, BNL OS-layer just one way. 
+- Individual laptop / home workstations likely need nothing special.
+
+Various ways to provide the software
+- Full control: local, green-field building, automated with the ~wcwc~ command.
+- Quick and easy:  ~rsync~ or ~scp~ to copy ~/wcwc~ from a BNL WCWC workstation.
+
+* Status
+
+- Initial BNL WCWC member workstations have OS-layer integration.
+  - My thanks to Yousen and Jay for being initial testers!
+
+- Majority of software management (~wcwc~) developed and tested.   To do:
+  - Build more WCT/WCP releases and other required stacks.
+    - Can build /art/ but LArSoft build fails.
+  - Capture/automate/replicate multi-suite builds.
+  - Figure how to deal with CUDA (OS vs Spack)
+
+- New WC GPU workstations shipped 8/1 should arrive today.
+  - Need a few days to receive and integrate to BNL WCWC.
+
+- Ongoing enrollment of any remaining EDG workstations.
+  - Some are waiting for ongoing analyses to complete.  No hurry.
+
+- Future maybes: derive Linux containers? populate CVMFS? CI hooks? Slurm batch?
+
+
+* 
+
+#+begin_center
+
+
+\tiny Wire-Cell Toolkit dependency tree
+#+ATTR_LATEX: :height 2cm
+[[./wct-spack.pdf]]
+
+
+\Large Next is a tour of the ~wcwc~ command.
+
+\Large It is somewhat technical.
+
+\Large Feel free to go if not interested!
+
+#+ATTR_LATEX: :height 2cm
+[[./root-spack.pdf]]
+
+\tiny ROOT dependency tree
+
+
+
+#+end_center
+
+* Tour of ~wcwc~ command usage
+
+The *wcwc* command provides simplified wrappers around Spack for most tasks performed for these roles:
+
+- user :: find available software and configure shell environment to run it.
+- developer :: use the software as a basis to develop other software.
+- admin :: install software, define environments and maintain the ~/wcwc~ software area.
+
+\vfill
+
+Caveat: I am still building software so not all examples will work BNL's WCWC just yet.
+
+* ~wcwc~ command-line help
+
+#+begin_example
+$ wcwc --help
+Usage: wcwc [OPTIONS] COMMAND [ARGS]...
+... summary of all commands ...
+
+
+$ wcwc <command> --help
+... summary of <command> usage ...
+#+end_example
+
+* Maintain sanitary shell environments with ~wcwc shell~
+
+*New, interactive shell* configured with Spack's basic shell environment.
+#+begin_example
+$ wcwc shell
+#+end_example
+*New, interactive shell* configured with Spack \textbf{Environment Modules} for a \textbf{spec}.
+#+begin_example
+$ wcwc shell --load root
+#+end_example
+*One-shot command* using software from one or more \textbf{WCWC stacks}.
+#+begin_example
+$ wcwc shell --stacks wirecell --command "spack env list"
+#+end_example
+*New, interactive shell* configured with a \textbf{Spack Environment} provided by a WCWC stack.
+#+begin_example
+$ wcwc shell --stacks wirecell --environment wct-0-28-0_minimal
+#+end_example
+
+\vfill
+
+\footnotesize
+These ~wcwc shell~ commands are run in a "vanilla" (non-Spack) environment.
+- \scriptsize Exit shell to regain original environment, one-shot command returns you directly.
+- A method to mutate your currently running shell is provided but best avoided.
+Next, will describe the concepts in \textbf{bold}.
+
+
+* The Spack "spec" (specification) mini-language to describe a package
+
+Spans gamut from *simple and abstract* all the way to *exhaustively concrete*
+- most abstract, just package name: ~wire-cell-toolkit~.
+
+- add a version: ~wire-cell-toolkit@0.28.0~.
+
+- compiler and variants: ~wire-cell-toolkit@0.28.0%gcc+root+hdf~.
+
+- partial dependencies:  ~wire-cell-toolkit+root ^root+minuit~
+
+- fully concrete spec rarely spoken but can be seen, /eg/ ~spack spec eigen~
+
+#+ATTR_LATEX: :height 3cm
+[[file:eigen-spec.png]]
+
+
+A *spec* is a more powerful but similar concept as UPS's package/flavor/version/qualifier.
+
+
+
+* Spack Environment Modules
+
+Shell environment can be configured for one or more *specs* via Spack Environment Modules.
+
+#+begin_example
+$ wcwc shell -l <spec1> -l <spec2>
+
+...use the s/w from <spec1> and <spec2>...
+
+$ exit
+#+end_example
+Now back in your original, unmodified shell.
+
+
+* Spack Environments (NOT Environment Modules)
+
+Combine (link) files from many packages (specs) into a Spack *view* directory and
+set environment to use that *view* (~PATH~-like variables).
+Two types of Spack environments:
+
+** system: created by WCWC admin in a specific "stack", available to all users *by name*
+\footnotesize
+#+begin_example
+$ wcwc shell --stacks <stacks> --environment <environment>
+...(use the s/w from the environment)...
+$ exit
+#+end_example
+
+** personal: created by WCWC user and used *by directory*
+
+\footnotesize
+#+begin_example
+$ wcwc make-env -e my-env <spec1> <spec2>  # one time
+$ wcwc shell -e my-env
+...(use the s/w from <spec{1,2}>)...
+$ exit
+$ rm -r my-env        # some time later when all done
+#+end_example
+Later, before final removal, can always renter with:  ~wcwc shell -e my-env~.
+
+
+* WCWC "stacks" give a name to a nascent Spack pattern
+
+Each stack collects a *subgraph* of an overall package dependency tree.
+- Examples: ~spack~, ~wirecell~, ~nusoft~, ~art~, ~larsoft~, ~dune~, ~sbnd~
+- Stacks form a coarse-grained dependency tree.
+Each stack has a Spack *configuration scope* that associates and defines:
+- A remote ~git~ repository providing a Spack *package repo* (set of packaging modules).
+- An install tree root and its "projection" path pattern.
+- A Spack *namespace* (/ie/ the *repo* name) partly defines the projection.
+- A location to store definitions of *Spack Environments* of "system" type.
+Why stacks?
+- Deal with Spack package namespace collisions.
+- Segments the install tree for easier fractional copy/purge.
+
+* Spack Environments for software development
+
+We can leverage "personal" Spack Environments for easy development.
+
+\footnotesize
+#+begin_example
+$ wcwc make-env --stacks wirecell --environment wct-dev/ wire-cell-toolkit
+$ git clone git@github.com:WireCell/wire-cell-toolkit.git wct-dev/src/
+$ wcwc shell -e wct-dev
+$ cd wct-dev/src
+$ ./wcb configure --prefix=$SPACK_ENV/.spack-env/view [...]
+$ ./wcb install
+#+end_example
+
+The ~view/{bin,lib,include}/~ directories hold all the files (via symlinks) from Spack's installed
+~wire-cell-toolkit~ package and its dependencies.
+
+- But, it's our directory so we can also ~./wcb install~ to it (overwriting the symlinks).
+
+- Also possible to ditch Spack Environment and use a bare Spack View if you DIY your environment settings.
+
+
+* Initializing WCWC from green field
+
+Pick a disk location with lots of space.
+#+begin_example
+$ export WCWC_PREFIX=/tmp/wcwc  # if not using default /wcwc
+#+end_example   
+Generate initial configuration file and add/tweak Spack and stack definitions.
+#+begin_example
+$ wcwc dump-config
+$ emacs $WCWC_PREFIX/wcwc.yaml # or default /wcwc/wcwc.yaml
+#+end_example
+Initialize Spack and any stacks:
+#+begin_example
+$ wcwc init spack
+$ wcwc init wirecell
+#+end_example
+
+The WCWC prefix is now ready for installing packages.
+
+* Installing packages
+
+** Base stack (Spack itself)
+
+#+begin_example
+$ wcwc install root
+#+end_example
+
+** Installing to dependent stack
+
+#+begin_example
+$ wcwc install -S wirecell go-jsonnet
+#+end_example
+
+Required when Spack does not provide a package or a Spack package needs to be overridden by one in the stack.
+
+** More concrete specs
+
+\footnotesize
+#+begin_example
+$ wcwc install -S wirecell wire-cell-toolkit@0.28.0+glpk+root+hdf
+$ wcwc install -S wirecell wire-cell-prototype@v00_17_01
+#+end_example
+
+* Work needed on ~wcwc~
+
+** For developer
+
+- Derive a "personal" Environment from a defined "system" Environment.
+- Currently, creating a Spack Environment quietly fails when packages are missing from the central install area.
+- Support for installing Spack packages into Environment that are not already installed in a stack.
+
+** For admin
+
+- Something "meta" to better automate/replicate installation.
+  - Eg, maximize reuse of ~root~ between WCT and WCP.
+  - Record/pre-define installations allow automatic replay.
+
+* More info
+
+- Repo with source configuration and docs:
+  - https://github.com/brettviren/wcwc
+  - Make GitHub Issues here for problems with ~wcwc~ or BNL's WCWC.
+
+- Docs are online in [[https://www.phy.bnl.gov/~bviren/wire-cell/docs/wcwc.pdf][PDF]] and [[https://www.phy.bnl.gov/~bviren/wire-cell/docs/wcwc.html][HTML]] formats
+  - Warning: these are already out of date and are being rewritten.
+
+
+
+
+
