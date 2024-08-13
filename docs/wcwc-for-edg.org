@@ -1,7 +1,18 @@
 #+title: Wire-Cell Workstation Cluster (WCWC)
 #+setupfile: ~/sync/talks/setup.org
+#+date: August 9, 2024
 
 * meta :noexport:
+
+#+begin_src sh :results output drawer
+dot -Tpdf -o wct-spack.pdf wct-spack.dot
+dot -Gdpi=50 -Tpdf -o root-spack.pdf root-spack.dot
+#+end_src
+
+#+RESULTS:
+:results:
+:end:
+
 
 #+begin_src sh :results output drawer
 scp wcwc-for-edg.pdf hierocles.bnl:public_html/wire-cell/docs/

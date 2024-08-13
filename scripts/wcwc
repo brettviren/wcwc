@@ -1096,7 +1096,7 @@ def show(ctx, format, stacks):
     
 
 @admin_command("install")
-@click.option("-S","--stack", default=None, type=str, required=True,
+@click.option("-S","--stack", default="spack", type=str, 
               help="The name of the stack in which to perform the installation")
 @click.argument("specs", nargs=-1)
 @click.pass_context
