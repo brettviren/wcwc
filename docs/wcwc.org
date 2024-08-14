@@ -57,16 +57,21 @@ The following topics are covered in this document:
 :CUSTOM_ID: terms
 :END:
 
+WCWC is described in terms of different types of user accounts and computers across different networks.
+The document attempts to adhere to using these terms:
 
-We will describe "primary" and "secondary" user accounts.  These labels do not
-indicate status but simply a "primary" user account is the account on the
-workstation that hosts the physical disk providing the user's ~$HOME~.  When a
-user logs into another workstation we call that a "secondary" account.
+- workstation :: a physical computer, be it desktop or laptop, part of WCWC or not.
+- local workstation :: a workstation at which a human user currently sits.
+- remote workstation :: a workstation accessible by another workstation.
+- (ssh) client account :: an account from which the ~ssh~ client may be run.
+- (ssh) server account :: an account in which an ~ssh~ connection may produce a session.
+- local account :: an account managed by the operating system of the workstation (/eg/ via an entry in ~/etc/passwd~)
+- distributed identity :: an account managed outside of any one workstation operating system but applied to many.
+- internal (account or workstation) :: that which is part of a WCWC
+- external (account or workstation) :: that which is not part of a WCWC, possibly separated from a WCWC via a firewall or other access control.
+- home provider :: a single WCWC workstation providing a user's ~$HOME~.
 
-We will also speak of "local" and "remote" accounts.  In all cases a "local" account is the one hosted by the physical computer at which the user happens to be seated.  We will also speak of "internal" account which is when a user is accessing a computer in the local network on which the WCWC workstations communicate.  Any account on a different network is called "external".
-
-
-Here we will use the term "primary" to indicate a user account on the single workstation that they "own" and which provides the user's physical ~$HOME~ directory.  We describe an non-primary account as "secondary".  A secondary account is simply one used by a user on a WCWC workstation that does not directly provide their physical ~$HOME~ disk.  Any account on a workstation outside of the WCWC is called "external".  An external account may be on a workstation the same LAN as the WCWC or be separated from the WCWC workstation LAN via a firewall.  When a workstation is called "local" it refers to the machine at which a user is physically sitting while a workstation is considered "remote" from the user when it is otherwise accessed.
+These terms are meant to provide generic applicability are informed by the particular BNL WCWC organization.  See section [[#bnl-accounts]] for details on BNL WCWC accounts.
 
 * Enrollment
 :PROPERTIES:
@@ -88,7 +93,7 @@ Enrolling a workstation is initiated by its BNL custodian ("owner") or designee.
 *** User enrollment
 Every BNL WCWC user must perform these tasks to assure BNL WCWC membership:
 - Obtain a [[https://www.phy.bnl.gov/Accounts/][Physics department SSH account]].
-- Determine on which workstation they will be a primary user (where their ~$HOME~ resides)
+- Determine the home provider workstation.
 - Coordinate with the WCWC admin make alteration to user IDs and file ownership and permissions (see below).
 
 Different, pre-existing local user accounts tend to have conflicting user ID numbers (eg 1000 or 1001).  A unique user ID is required to simplify the sharing of ~$HOME~ via NFS.  The process to migrate to a unique user ID number is relatively simple and the WCWC admin will handle it.  However, the user must fully log out and cease any running processes on the workstation while the UID change is made.
@@ -377,6 +382,8 @@ As described in section [[#spec]], multiple instances of the same package may be
 $ wcwc install -S wirecell wire-cell-toolkit@0.28.0~glpk~root~hdf
 $ wcwc install -S wirecell wire-cell-toolkit@0.28.0+glpk+root+hdf
 #+end_example
+
+
 
 * Nuts and bolts
 :PROPERTIES:

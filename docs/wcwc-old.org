@@ -718,63 +718,6 @@ The BNL physics department maintains an identity management system (IDM) based o
 :CUSTOM_ID: freeipa-enroll
 :END:
 
-#+begin_example
-  # apt install freeipa-client
-  # hostname
-  # ipa-client-install \
-    --server=idm3.phy.bnl.gov \
-    --server=idm2.phy.bnl.gov \
-    --server=idm1.phy.bnl.gov \
-    --server=idm.phy.bnl.gov \
-    --domain=phy.bnl.gov
-  # ipa-client-automount --server=idm.phy.bnl.gov --location=wcwc-u
-#+end_example
-Make sure ~hostname~ returns a FQDN.  If not, set it with ~hostname~ and update ~/etc/hostname~ for after later reboots.  This requires the user/pass of a FreeIPA account that is authorized to enroll computers.
-
-The workstation host and all its local users then requires some settings in FreeIPA:
-
-*** Add the host
-:PROPERTIES:
-:CUSTOM_ID: freeipa-add-host
-:END:
-
-
-1. ~Identity~ -> ~Hosts~ -> ~hostname.phy.bnl.gov~.
-2. Add primary owner's real name and other general info about the workstation in description and SAVE.
-3. In the ~Host Groups~ tab, ~+Add~, add the host to the group ~wcwc-workstations~.
-
-*** Add primary user
-:PROPERTIES:
-:CUSTOM_ID: freeipa-add-user
-:END:
-
-A local user of the workstation will already have a Physics IDM account if they have a Physics SSH gateway account.   If they do not have an account they must request one from: https://www.phy.bnl.gov/Accounts/.
-
-#+begin_note
-The local and IDM user names must match.  If a mismatch occurs, either a new local or a new IDM account is needed or one of them must be renamed.
-#+end_note
-
-Given the ~username~ in FreeIPA:
-
-1. ~Identity~ -> ~Users~ -> ~username~
-2. ~User Groups~, ~+Add~ and add to ~wcwc~.
-   
-The ~$HOME~ provided by the workstation for a local user which is NFS-mounted to other WCWC workstations.  A map the combines ~workstation~ and ~username~ information is updated with:
-
-1. ~Network services~ -> ~Automount~ -> ~wcwc-u~ -> ~auto.u~ -> ~+Add~
-2. The ~Key~ is the username
-3. the ~Mount information~ is as follows, replacing ~WORKSTATION~ with the fully-qualified name of the workstation
-
-#+begin_example
--fstype=nfs4 -sync,rw,soft,sec=sys,proto=tcp,port=2049 WORKSTATION:/home/&
-#+end_example
-
-Internally, FreeIPA assigns large user (and group) ID numbers while we wish to keep the BNL "life" number used at the OS level.  To allow this an "ID View" is needed for each user:
-
-1. ~Identity~ -> ~ID Views~ -> ~wcwc~ -> ~+Add~ 
-2. Fill in the user name and matching user login, desired UID matching GID, shell and home directory (~/home/USER~).
-3. SAVE
-See sections [[#user-ids]] and [[#home-dirs]] for more info on user IDs and home directories.  
 
 *** One time setup
 :PROPERTIES:
