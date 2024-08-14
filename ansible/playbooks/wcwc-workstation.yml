@@ -37,3 +37,9 @@
         owner: root
         mode: '755'
         
+    - name: Install wcwc command
+      ansible.builtin.copy:
+        src: ../../scripts/wcwc
+        dest: /usr/local/bin/wcwc
+        owner: root
+        mode: '755'      
