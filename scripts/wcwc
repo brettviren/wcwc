@@ -141,6 +141,8 @@ def run(cmd, lines=None, capture_error=True, **opts):
     if capture_error:
         opts["check"] = False
     debug(f'exec: {cmd=} {opts=}')
+    if not isinstance(cmd,str):
+        debug(' '.join(cmd))
     rc = srun(cmd, **opts)  # throws
     if lines is None and capture_error and rc.returncode:
         error(f'command failed: {cmd}')
@@ -632,6 +634,31 @@ class Spack(Object):
         self.setdefault("repo_path", "{prefix}/spack/var/spack/repos/builtin")
         self.setdefault("remote", "develop")
 
+    def command_line(self, args=None, stacks=None):
+        '''
+        Build and return command line string for calling spack as tuple:
+
+            (Path("/path/to/executable"), args_with_stacks)
+
+        If args_with_stacks keeps same type as args (array or string) and has
+        stacks added as Spack configuration scopes.
+
+        '''
+        extra = list()
+        exe_path = self.path("source") / "bin" / "spack"
+
+        for stack in stacks or ():
+            extra += ["-C", str(stack.path("scope"))]
+
+        cli = extra
+        if isinstance(args, str):  # stringify
+            extra = ' '.join(extra)
+            cli = f'{extra} {args}'
+        elif args:              # assume list'ish
+            cli = extra + list(args)
+
+        return (exe_path, cli)
+
     def execfunc(self, args=None, stacks=None, **kwds):
         '''
         Return spack command function that runs "args".
@@ -644,18 +671,8 @@ class Spack(Object):
 
         kwds are passed directly to subprocess.
         '''
-        extra = list()
-        for stack in stacks or ():
-            extra += ["-C", str(stack.path("scope"))]
-
-        cli = extra
-        if isinstance(args, str):  # stringify
-            extra = ' '.join(extra)
-            cli = f'{extra} {args}'
-        elif args:              # assume list'ish
-            cli = extra + list(args)
-        
-        return which(self.path("source") / "bin" / "spack", cli, **kwds)
+        path,cli = self.command_line(args, stacks)
+        return which(path, cli, **kwds)
 
     def command(self, cmd, stacks=None, **kwds):
         '''
@@ -823,8 +840,13 @@ cmddef = dict(context_settings = dict(auto_envvar_prefix='WCWC',
 @click.group("wcwc", **cmddef)
 @click.pass_context
 def cli(ctx, config, prefix, log_output, log_level):
+    '''
+    Operate on the WCWC software ecosystem.
+    '''
     setup_logging(log_output, log_level)
     ctx.obj = WCWC(prefix, config)
+    return
+    
 
 
 def use_stacks(with_spack=True, required=False):
@@ -934,13 +956,16 @@ def admin_command(name=None, ignore_log_ok=False, **cmddef):
                 ctx.obj.prefix.mkdir(parents=True, exist_ok=True)
             except PermissionError:
                 if ignore_log_ok:
-                    do_log = False
+                    do_log = False  
                 else:
                     raise click.UsageError(f"no permission create {ctx.obj.prefix}, give --prefix or set WCWC_PREFIX")
 
-
-            if do_log and not os.access(ctx.obj.prefix, os.W_OK):
-                raise click.UsageError(f"no write permission to {ctx.obj.prefix}, give --prefix or set WCWC_PREFIX")
+            # need double-check when prefix already exists
+            if not os.access(ctx.obj.prefix, os.W_OK):
+                if ignore_log_ok:
+                    do_log = False
+                else:
+                    raise click.UsageError(f"no write permission to {ctx.obj.prefix} for logging, give --prefix or set WCWC_PREFIX")
 
             t1 = datetime.now()
             got = func(*args, **kwds)
@@ -1023,8 +1048,13 @@ def list_os():
         info(one)
 
 
-@admin_command("spack", context_settings=dict(ignore_unknown_options=True,
-                                            help_option_names=[]))
+# disable auto-help so we pass on "-h/--help" to spack.
+@admin_command("spack",
+               ignore_log_ok=True,
+               context_settings={
+                   "ignore_unknown_options":True,
+                   "help_option_names":[],
+               })
 @use_stacks()
 @click.argument("args", nargs=-1, type=click.UNPROCESSED)
 @click.pass_context
@@ -1140,6 +1170,65 @@ def init(ctx, recurs, force, stack):
     debug(f"initialize stack: {stack.name}")
     stack.init(ctx.obj, recurs)
     
+
+def assure_builder_image(name = "wcwc-builder", force=False):
+    podman = which("podman", capture_error=False)
+
+    if not force:
+        got = podman(f'image exists {name}')
+        if got.returncode == 0:
+            log.debug(f'podman image for building exists as "{name}"') 
+            return
+
+    containerfile = '''
+FROM debian:bookworm
+RUN apt update \
+    && \
+    apt install -y \
+      build-essential ca-certificates coreutils curl gfortran git gpg \
+      lsb-release unzip zip \
+      python-is-python3 python3 python3-distutils python3-venv python3-click python3-yaml \
+    && \
+    apt clean
+COPY wcwc /usr/local/bin/
+RUN useradd -ms /bin/bash wcwc && \
+    mkdir -p /wcwc && \
+    chown wcwc:wcwc /wcwc
+USER wcwc
+WORKDIR /wcwc
+CMD ["bash"]
+ENTRYPOINT ["wcwc"]
+'''.encode()
+    context = Path(__file__).parent.absolute()
+    podman(f'build -t {name} -f - {context}', capture_output=False, input=containerfile)
+
+
+@cli.command("make-builder")
+@click.option("-n","--name", default="wcwc-builder",
+              help='Name the builder image, default is "wcwc-builder"')
+@click.option("-f","--force", is_flag=True, default=False,
+              help="Force a remake of the image if it exists")
+@click.pass_context
+def make_builder(ctx, name, force):
+    '''
+    Assure the builder podman image of the given name exists.
+
+    Default name is "wcwc-builder".
+
+    Use the iamge like this:
+
+      podman run -v /path/to/wcwc:/wcwc:rw,U --userns=keep-id -it --rm [image-name] [wcwc-args]
+
+    The -v is required to provide storage for the /wcwc dir in the container.
+    If omitted, the (empty) /wcwc will be used, but then lost if --rm is kept.
+
+    The [wcwc-args] are as you may give to the "wcwc" command.
+
+    A copy of "wcwc" is burned into the image.  If the version of wcwc you are
+    currently running is newer you may wish to -f/--force an image rebuild.
+    '''
+    assure_builder_image(name, force)
+
 
 @cli.command("shell")
 @click.option("-S","--stacks", default=None, type=str, 
