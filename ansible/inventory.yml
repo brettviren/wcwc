@@ -1,9 +1,12 @@
 # general user workstations that go all-in with features
 workstations:
   hosts:
+    lycastus.phy.bnl.gov:
     hierocles.phy.bnl.gov:
     heracles.phy.bnl.gov:
     aswork.phy.bnl.gov:
+    wcgpu0.phy.bnl.gov:
+    wcgpu1.phy.bnl.gov:
   vars:
     ansible_remote_user: root
 
