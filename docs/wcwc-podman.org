@@ -1,0 +1,45 @@
+#+title: Use of containers in WCWC
+
+* Introduction
+
+Containers are used with WCWC for a few purposes:
+
+- Packages are installed in a well defined, minimal container.
+- Images may be built from installed packages and defined Spack Environments.
+  
+* Container technology
+
+We consider here the use of ~podman~ for building containers.  
+
+* Building packages
+
+A container applies constraints on how ~spack~ installs packages beyond what the ~wcwc~ command supplies.  To assure reproducible builds, it is required to fully specify the build environment because Spack packaging is not perfectly hermetic.   Minor, seemingly unrelated details of the OS can radically determine if some package builds or not.  For example, ~py-torch~ is sensitive to the existence of ~libgomp~ even when OpenMP is disabled.  A container used for installing Spack packages can well specified and made minimal.  Any special adjustments become documented in the ~Containerfile~.  A new WCWC site can take a proven container and have high expectation of success to rebuild an ecosystem.  Building in a container enables flexibility in distributing installations across different hosts and/or accounts that may not have write access to the common ~/wcwc~ while still utilizing the expected prefix and not resorting to ~rpath~ rewriting.
+A ~Containerfile~ may also be used to capture history of installation.  It may simply be continuously extended with novel ~wcwc install~ commands as new packages are required.
+
+** Images
+
+Unless specified, every image is built from a ~Container.NAME~ like 
+#+begin_example
+cd wcwc/
+podman build -t wcwc-NAME -f images/builder/Containerfile.NAME .
+#+end_example
+Some images build on others and thus it is required that ~NAME~ match as above.
+
+Images allow for the container ~/wcwc~ to be provided as a host directory when run like:
+#+begin_example
+podman run -v /host/path/wcwc:/wcwc:rw,U --userns=keep-id -it --rm NAME [COMMAND LINE]
+#+end_example
+
+Some images have a specific entry point, others allow running ~bash~ or other program.
+
+** The wcwc-builder image
+
+The ~wcwc-builder~ image provides the minimal build OS, the ~wcwc~ user and command and the initial, empty ~/wcwc~.  This has no entry point and defaults to ~bash~.
+
+** The spack-develop image
+
+The ~spack-develop~ image is built upon the ~wcwc-builder~ image and simply adds ~spack~ with the ~develop~ branch checked out in ~/wcwc/spack~.  It has an entry point of ~wcwc~.  The intention is that it is used to consistently run ~install~ commands.
+
+#+begin_example
+podman run -v /host/path/wcwc:/wcwc:rw,U --userns=keep-id -it --rm spack-develop install root
+#+end_example
