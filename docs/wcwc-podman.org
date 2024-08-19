@@ -32,14 +32,35 @@ podman run -v /host/path/wcwc:/wcwc:rw,U --userns=keep-id -it --rm NAME [COMMAND
 
 Some images have a specific entry point, others allow running ~bash~ or other program.
 
-** The wcwc-builder image
-
 The ~wcwc-builder~ image provides the minimal build OS, the ~wcwc~ user and command and the initial, empty ~/wcwc~.  This has no entry point and defaults to ~bash~.
-
-** The spack-develop image
 
 The ~spack-develop~ image is built upon the ~wcwc-builder~ image and simply adds ~spack~ with the ~develop~ branch checked out in ~/wcwc/spack~.  It has an entry point of ~wcwc~.  The intention is that it is used to consistently run ~install~ commands.
 
+** Bootstrapping
+
 #+begin_example
-podman run -v /host/path/wcwc:/wcwc:rw,U --userns=keep-id -it --rm spack-develop install root
+wcwc@wcgpu0:~$ wcwc make-builder
+wcwc@wcgpu0:~$ podman run -v $HOME/wcwc-dev:/wcwc -it --rm wcwc-builder init --tag develop spack
+wcwc@wcgpu0:~$ podman run -v $HOME/wcwc-dev:/wcwc -it --rm wcwc-builder install "py-torch+cuda cuda_arch=89"
 #+end_example
+
+112 packages.  Most require a few second to a couple minutes and load is O(1) core.  py-torch itself uses about 16 core (64 avail) and takes 20 minutes.
+
+
+#+begin_example
+wcwc@wcgpu0:~$ podman run -v $HOME/wcwc-dev:/wcwc -it --rm wcwc-builder init wirecell
+wcwc@wcgpu0:~$ podman run -v $HOME/wcwc-dev:/wcwc -it --rm wcwc-builder install -S wirecell wire-cell-prototype
+wcwc@wcgpu0:~$ podman run -v $HOME/wcwc-dev:/wcwc -it --rm wcwc-builder install -S wirecell wire-cell-toolkit
+wcwc@wcgpu0:~$ podman run -v $HOME/wcwc-dev:/wcwc -it --rm wcwc-builder install emacs
+# see https://github.com/WireCell/wire-cell-toolkit/issues/330
+# quickly add a +emacs variant
+wcwc@wcgpu0:~$ podman run -v $HOME/wcwc-dev:/wcwc -it --rm wcwc-builder install -S wirecell wire-cell-toolkit+emacs
+@wcgpu0:~$ podman run -v $HOME/wcwc-dev:/wcwc -it --rm wcwc-builder install -S wirecell wire-cell-toolkit+emacs+root+hdf+glpk
+#+end_example
+
+Note, ~wire-cell-toolkit+root~ does not concretize to the root from ~wire-cell-prototype~.  WCP needs a "bigger" root than WCT.
+
+Next:
+- [  ] run-in-podman 
+- [ ] update wire-cell-spack to depend on py-torch and py-torch+cuda
+- [ ] rsync to server.

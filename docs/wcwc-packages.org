@@ -60,10 +60,10 @@ PyTorch is the primary DNN toolkit of WCWC users and WCT can make use of libtorc
     wcwc install "py-torch+cuda cuda_arch=89"
 #+end_example
 #+begin_note
-FIXME: must set ~TMPDIR~ to avoid ~/tmp~ being filled.  For safety, set this and ~TEMP~ in ~wcwc~, but really, this is a bug in the ~py-torch/package.py~ which should honor the configured ~build_stage~ setting.
+FIXME: must set ~TMPDIR~ to avoid ~/tmp~ being filled.  For safety, set this and ~TEMP~ in ~wcwc~, but really, this is a bug in the ~py-torch/package.py~ which should honor the configured ~build_stage~ setting.  Note, this is not required when building in a [[file:wcwc-podman.org][podman container]] (assuming podman has sufficient space in the user's home).
 
 Also, earlier builds failed due to OpenMP being detected in the OS but not sufficient to work. 
-~apt install libomp-dev~ was needed.  The above was on a different Debian host.  This motivates the need to lock down the build OS via container.
+~apt install libomp-dev~ was needed.  The above was on a different Debian host.  This also motivates the use of a container to build.  In a minimal Debian 12 podman container, py-torch builds without problems (other than loooooong build time).  The ~wcwc make-builder~ command creates the container.
 #+end_note
 
 #+begin_example
@@ -84,4 +84,8 @@ Note, had to load a kernel module:
 
 #+begin_example
 root@wcgpu0:~# modprobe nvidia_uvm
+#+end_example
+
+#+begin_example
+wcwc@wcgpu0:~$ wcwc admin install -S wirecell wire-cell-toolkit+torch+cuda cuda_arch=89
 #+end_example

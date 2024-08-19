@@ -1,0 +1,288 @@
+#+title: BNL WCWC
+
+This document extends [[file:wcwc.org]] with BNL-specific information and uses terms defined there.  It is primarily intended for the BNL WCWC administrators.  All mentions to "WCWC" refer to the BNL instance, unless otherwise stated.
+It makes [[https://www.ietf.org/rfc/rfc2119.txt][RFC 2119]] statements assuming a nominal policy.  However, variants are possible and an interested user may discuss with the WCWC admins about options and special needs.
+
+* Workstation prerequisites
+
+Prior to enrollment a potential WCWC workstation must be:
+- running a supported and up-to-date operating system.
+- available via a static IP address allocated from BNL networking.
+- configured with the WCWC admin keys in ~/root/.ssh/authorized_keys~.
+
+* Hostname
+
+The ~hostname~ command must resolve to a fully-qualified host name.  This can be assured with:
+
+#+begin_example
+  # hostname <host>.phy.bnl.gov
+  # echo <host>.phy.bnl.gov > /etc/hostname
+#+end_example
+
+
+* Basic configuration
+
+- The enrolling workstation shall be given a baseline configuration via Ansible.
+
+The WCWC admin runs:
+
+#+begin_example
+  1$ cd ~/dev/wcwc
+  2$ emacs ansible/inventory.yml
+  3$ ansible workstations -m ping -l <hostname>.phy.bnl.gov
+  4$ ansible-playbook -l <hostname>.phy.bnl.gov' ansible/playbooks/wcwc-workstation.yml
+#+end_example
+1. Enter the source providing Ansible and configured via ~direnv~
+2. Add the fully qualified host name to the inventory
+3. Test it is accessible
+4. Apply the baseline configuration
+
+* Intermission
+
+The above is sufficient for a WCWC workstation to exist in a stand-alone fashion.  The remaining document describes further integration allowing WCWC users to utilize the workstation.
+
+
+* User accounts
+:PROPERTIES:
+:CUSTOM_ID: bnl-accounts
+:END:
+
+- A WCWC user must control a "distributed" BNL Physics Department SSH account from https://www.phy.bnl.gov/Accounts/.
+- A WCWC user may control a "local" account on zero or more WCWC workstations.
+
+Note, the distributed account system is provided by an instance of the FreeIPA IDM which also includes features to configure WCWC services.  The text will refer to this service as "IDM".
+
+* Add user to IDM
+:PROPERTIES:
+:CUSTOM_ID: freeipa-add-user
+:END:
+
+A users distributed identity must be added to the WCWC group in FreeIPA:
+
+1. ~Identity~ -> ~Users~ -> ~username~
+2. ~User Groups~, ~+Add~ and add to ~wcwc~.
+   
+A user's ~$HOME~ must be added to the automount map:
+
+1. ~Network services~ -> ~Automount~ -> ~wcwc-u~ -> ~auto.u~ -> ~+Add~
+2. The ~Key~ is the username
+3. the ~Mount information~ is as follows, replacing ~WORKSTATION~ with the fully-qualified name of the workstation
+
+#+begin_example
+-fstype=nfs4 -sync,rw,soft,sec=sys,proto=tcp,port=2049 WORKSTATION:/home/&
+#+end_example
+
+Internally, FreeIPA assigns large user (and group) ID numbers while we wish to keep the BNL "life" number used at the OS level.  To allow this an "ID View" is needed for each user:
+
+1. ~Identity~ -> ~ID Views~ -> ~wcwc~ -> ~Users~ -> ~+Add~ 
+2. Fill in the user name and matching user login, desired UID matching GID, shell and home directory (~/home/USER~).
+3. SAVE
+See sections [[#user-ids]] and [[#home-dirs]] for more info on user IDs and home directories.  
+
+
+* Add host to IDM
+:PROPERTIES:
+:CUSTOM_ID: freeipa-add-host
+:END:
+
+The WCWC admin must perform these settings via the FreeIPA IDM web interface:
+
+1. ~Identity~ -> ~Hosts~ -> ~hostname.phy.bnl.gov~.
+2. Add primary owner's real name and other general info about the workstation in description and *Save*.
+3. In the ~Host Groups~ tab, ~+Add~, add the host to the group ~wcwc-workstations~.
+4. ~Identity~ -> ~ID Views~ -> ~wcwc~ -> ~Hosts~ -> ~+Apply to host groups~ -> ~wcwc-workstations~
+
+Note, this last command will try to re-add all previously added hosts.  This throws harmless errors.  The issue is FreeIPA does not support adding a host group per se but rather the Hosts list here is flat.  One may instead ~+Apply to hosts~ and select individual hosts to add.
+
+This may be required to finally get correct IDs:
+#+begin_example
+  # service sssd restart
+  # getent passwd bviren
+  bviren:*:22351:22351:Brett Viren:/home/bviren:/usr/bin/fish
+#+end_example
+
+* ~$HOME~ provider
+:PROPERTIES:
+:CUSTOM_ID: home-provider
+:END:
+
+- A WCWC user's ~$HOME~ must NFS-exported by a WCWC or non-WCWC "home provider" workstation.
+- A WCWC workstation shall have ~/home~ as an automount volume controlled by a map in IDM as detailed next.
+- The user ID number for ~$HOME~ NFS-exported by any home provider (WCWC or non-WCWC) must be made unique according to the WCWC schema and the ownership and permission of user's files modified to reflect that.
+- The ID for a user that is a BNL employee must be  equal to the employee (aka "life") number.
+- The ID for a user that is a BNL guest is formed by taking the last 4 digits of the guest number and prepending it with ~L - 'A' + 1~ where "~L~" is the prefix letter expressed in ASCII and "~'A'~" is the ASCII encoding for "A".
+
+  In order to migrate to a new user ID number the user must logout of the workstation and otherwise kill any running process.  As user ~root~
+#+begin_example
+  # groupmod -g NEWGID GROUPNAME  
+  # usermod  -g NEWGID -u NEWUID USERNAME
+#+end_example
+The ~usermod~ command will change permissions of files in the user's ~$HOME~ but not elsewhere.  To list top-level directories owned by the old user ID run:
+#+begin_example
+  find / -type d -user OLDUID -prune 2>/dev/null
+#+end_example
+One may then change ownership for each directory listed.
+#+begin_example
+  chown --from=CURRENT_OWNER:CURRENT_GROUP -R NEW_OWNER:NEW_GROUP DIRECTORY
+#+end_example
+
+
+* Migrating a pre-existing ~/home~
+
+- The directory ~/nfs/home~ must exist and be populated with any local ~$HOME~ directories.
+- A preexisting direct-mount ~/home~ must have its ~/etc/fstab~ adjusted to mount the partition to ~/nfs/home~
+- A preexisting non-direct-mount ~/home~ must be moved to ~/nfs/home~.
+- The ~/home~ must exist and be empty prior to enrollment.
+
+* Enroll workstation IDM 
+:PROPERTIES:
+:CUSTOM_ID: idm-enroll
+:END:
+
+
+- To enroll a workstation, the WCWC admin must issue these commands as user root.
+
+#+begin_example
+  # ipa-client-install \
+    --server=idm3.phy.bnl.gov \
+    --server=idm2.phy.bnl.gov \
+    --server=idm1.phy.bnl.gov \
+    --server=idm.phy.bnl.gov \
+    --domain=phy.bnl.gov
+  # ipa-client-automount --server=idm.phy.bnl.gov --location=wcwc-u
+#+end_example
+Notes:
+- Ignore message ~conflicting time&date synchronization service 'ntp' will be disabled in favor of chronyd~
+- Answer "yes" to ~Proceed with fixed values and no DNS discovery?~
+- Answer "yes" to ~Do you want to configure chrony...~
+- May skip entering of NTP sources.
+- Enter authorized user credentials (WCWC admin) 
+
+
+* ~$HOME~ for the homeless
+:PROPERTIES:
+:CUSTOM_ID: home-for-homeless
+:END:
+
+A "homeless" user is one that does not have their "own" workstation to provide ~$HOME~.  They will be assigned a home provider by the WCWC admin.  Likely this will be ~lycastus~, the ~/wcwc~ NFS-server.  This host is not a NFS-client thus effectively not available for user login.
+
+#+begin_note
+Adding a "homeless" user requires variant of what is described in section [[#freeipa-add-user]].
+#+end_note
+
+1. FreeIPA: Identity -> User -> username -> User Groups -> +Add -> add to "wcwc".
+2. FreeIPA: Identity -> ID Views -> Users -> +Add -> Add user ID override (user, login, uid, gid, shell, home)
+3. FreeIPA: Network Services -> wcwc-u -> auto.u -> +Add -> key: username, mount: 
+#+begin_example
+-fstype=nfs4 -sync,rw,soft,sec=sys,proto=tcp,port=2049 lycastus.phy.bnl.gov:/home/&
+#+end_example
+4. Creating the physical (not actual) home:
+#+begin_example
+  # mkdir -p /nfs/home/USER
+  # cp /etc/skel/.* /nfs/home/USER/
+  # chown -R USER:USER /nfs/home/USER/
+#+end_example
+5. Check on NFS-client:
+#+begin_example
+  $ getent passwd USER
+  $ ls -la /u/USER
+  $ ls -la /home/USER 
+#+end_example   
+
+
+
+
+* Debugging autofs
+
+The use of autofs to NFS-mount ties together several things.
+- Adding a user's ~$HOME~, see section [[#freeipa-add-user]].
+- Setting up a home provider, see section [[#home-provider]].
+- Assuring the host is an ~ipa-client-automount~, see section [[#idm-enroll]].
+- Assuring ~auto_home.sh~ script exists. (run ansible playbook).
+
+On NFS-client, the *basic check* is:
+#+begin_example
+ls -ld /u/USER /home/USER  ### show correct ownership by name
+ls -ldn /u/USER /home/USER ### show ownership by "short" user ID
+#+end_example
+Both should exist on any WCWC workstation, except special case of the home provider for the "homeless" (users with no workstation of their own).
+
+If they do not exist we go end to end starting at the NFS server:
+
+On NFS-server, does the user account exist and with "short" user ID?
+#+begin_example
+getent passwd USER 
+#+end_example
+
+On NFS-server, does the the physical (not actual) home directory exists?
+#+begin_example
+ls -la /nfs/home/USER
+#+end_example
+If it is missing then create it according to section [[#home-for-homeless]].
+
+On NFS-server, is ~/nfs/home~ exported?
+#+begin_example
+  # showmount -e
+#+end_example
+If not, check ~/etc/exports~.  Changing that requires:
+#+begin_example
+  # exportfs -ua
+  # exportfs -av   ### -v to check
+  # showmount -e   ### to double check
+#+end_example
+Assure ~/nfs/home~ is exported to the LAN subnet.
+
+On NFS-client, check direct NFS-mount:
+#+begin_example
+  # mount -t nfs4 lycastus.phy.bnl.gov:/home /mnt
+  # ls -l /mnt     ### see any homes?
+  # umount /mnt
+#+end_example
+If not, perhaps NFS-server or NFS-client has a local firewall interfering.
+
+On NFS-client, check autofs is working.  After any change to IDM related to autofs, services may need restarting: 
+#+begin_example
+  # service sssd restart
+  # service autofs restart
+#+end_example
+
+On NFS-client, check that autofs knows the maps
+#+begin_example
+  # automount --dumpmaps
+#+end_example
+Should see:
+- ~/wcwc~ in ~auto.direct~ map
+- ~/home~ in ~auto_home.sh~ map
+- ~/u~ in ~auto.u~ map
+If missing, then make corrections in FreeIPA.
+
+On NFS-client, check that the "program" map script exists and works:
+#+begin_example
+  # /etc/auto_home.sh USER
+#+end_example
+This should return ~:/nfs/home/USER~ when run on the home-provider otherwise it should return ~/u/USER~.
+
+On NFS-client, check that the intermediate automount works:
+#+begin_example
+  # ls -ld /u/USER
+#+end_example
+
+And, finally, assure end result
+#+begin_example
+  # ls -ld /home/USER
+#+end_example
+
+
+
+* 
+
+* Internal data
+
+TBD: how to share more than ~$HOME~.
+
+* External data
+
+TBD: how to access eg FNAL or SDCC storage.
+
+
+
