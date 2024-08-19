@@ -8,6 +8,7 @@
     - name: Install WCWC workstation client packages
       ansible.builtin.apt:
         pkg:
+          - autofs
           - build-essential
           - ca-certificates
           - coreutils
@@ -27,6 +28,7 @@
           - python3-distutils
           - python3-venv
           - python3-click
+          - rsync
           - unzip
           - zip
 
