@@ -1041,6 +1041,9 @@ def show(ctx, format, stacks):
     
 
 def do_shell(ctx, stacks, shell, output, command, environment, load, keep):
+    '''
+    Body of shell command for user and admin.
+    '''
 
     # figure out target shell
     if shell == "auto":
@@ -1090,22 +1093,32 @@ def do_shell(ctx, stacks, shell, output, command, environment, load, keep):
         debug(f'Using configuration for {shell}:\n------------\n{text}\n------------')
         rcfile.write(text.encode())
 
+    supported_shells = "bash, fish, tcsh"
+
+    env = dict(os.environ)
+    env["SHELL"] = shutil.which(shell)
+
     if command:
         if shell == "bash":
             command = f'source {rcfile.name} && {command}'
-            os.execvp("bash", ["bash", "-c", command])  # does not return
+            os.execvpe("bash", ["bash", "-c", command], env)
         if shell == "fish":
-            os.execvp("fish", ["fish","-C", f"source {rcfile.name}", "-c", command])  # does not return
-        raise click.UsageError(f'command unsupported for shell: "{shell}"')
+            os.execvpe("fish", ["fish","-C", f"source {rcfile.name}", "-c", command], env)
+        if shell == "tcsh":
+            os.execvpe("tcsh", ["tcsh", '-c', command, "-b", rcfile.name], env)
+        raise click.UsageError(f'command unsupported for shell: "{shell}", try one of: {supported_shells}')
 
+    # subshell
     if shell == "bash":
         cmd=["bash","--rcfile", rcfile.name]
         debug(f'execute: {" ".join(cmd)}')
-        os.execvp("bash", cmd)  # does not return
+        os.execvpe("bash", cmd)  # does not return
     if shell == "fish":
-        os.execvp("fish", ["fish","-C", f"source {rcfile.name}"])  # does not return
+        os.execvpe("fish", ["fish","-C", f"source {rcfile.name}"],env)
+    if shell == "tcsh":
+        os.execvpe("tcsh", ["tcsh","-i","-b", rcfile.name],env)
 
-    raise click.UsageError(f'execute unsupported for shell: "{shell}"')
+    raise click.UsageError(f'execute unsupported for shell: "{shell}", try one of: {supported_shells}')
 
 @cli.command("shell")
 @click.option("-S","--stacks", default=None, type=str, 
@@ -1133,8 +1146,11 @@ def user_shell(ctx, stacks, shell, output, command, environment, load, keep):
     installation.  Instead use command in the "wcwc admin" group.
 
     This command supports a "cross product" of behavior along these dimensions:
+
     - the shell flavor (fish, sh-like and csh-like)
+
     - the mode of supplying the target environment (settings, command or shell)
+
     - the make up of the target environment (base, load modules, activate environment)
     '''
     do_shell(ctx, stacks, shell, output, command, environment, load, keep)

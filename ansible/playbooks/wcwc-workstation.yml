@@ -5,6 +5,7 @@
 
   tasks:
 
+    # this list is not minimal and combines needs of basic wcwc and the BNL WCWC clustering policy
     - name: Install WCWC workstation client packages
       ansible.builtin.apt:
         pkg:
@@ -28,6 +29,7 @@
           - python3-distutils
           - python3-venv
           - python3-click
+          - python3-yaml
           - rsync
           - unzip
           - zip
