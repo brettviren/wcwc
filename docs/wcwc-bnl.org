@@ -1,16 +1,132 @@
 #+title: BNL WCWC
+#+setupfile: wcwc-setup.org
 
-This document extends [[file:wcwc.org]] with BNL-specific information and uses terms defined there.  It is primarily intended for the BNL WCWC administrators.  All mentions to "WCWC" refer to the BNL instance, unless otherwise stated.
-It makes [[https://www.ietf.org/rfc/rfc2119.txt][RFC 2119]] statements assuming a nominal policy.  However, variants are possible and an interested user may discuss with the WCWC admins about options and special needs.
 
-* Workstation prerequisites
+This document uses terms from and extends [[file:wcwc.org]] with BNL-specific information.  In particular, review that document for definitions of *local*, *remote, internal*, *external*, etc.  Unless stated otherwise, WCWC refers here to the BNL instance.  The first section describes user and workstation enrollment in the BNL WCWC.  Then sections with specific information intended for BNL WCWC users and admins, respectively.  Specifications follow [[https://www.ietf.org/rfc/rfc2119.txt][RFC 2119]] language.
+
+* Enrollment
+:PROPERTIES:
+:CUSTOM_ID: enroll
+:END:
+
+** Workstation enrollment
+
+Enrollment of a workstation into the BNL WCWC is initiated by its BNL custodian ("owner") or a designee.  These steps shall be followed:
+
+- Owner contacts the BNL WCWC admin to discuss any special needs for the workstation and or user(s) it brings along.
+  - Remaining steps may be performed by the owner or with negotiation by the BNL WCWC admin.
+- A supported OS is installed (see section [[#os]])
+- The OS is configured to use a static IP address that has been allocated from BNL ITD.
+- A copy of the [[https://www.phy.bnl.gov/~bviren/wire-cell/docs/wcwc.pub][BNL WCWC admin SSH public]] keys is placed in ~/root/.ssh/authorized_keys~.
+
+** User enrollment
+Every user must perform these tasks to enroll in the BNL WCWC:
+- Obtain a [[https://www.phy.bnl.gov/Accounts/][Physics department SSH account]].
+- Determine the home provider workstation.
+- User and admin coordinate on adjusting account IDs (see section [[#home-provider]])
+
+** Supported operating systems
+:PROPERTIES:
+:CUSTOM_ID: os
+:END:
+
+BNL WCWC currently supports the Debian version 12 distribution of GNU/Linux (aka "stable" aka "bookworm").  BNL WCWC workstations will be upgraded to Future releases of Debian in coordination with the workstations custodians and WCWC users.
+
+
+* User
+
+
+** Remote access
+
+Remote access is when you the user are sitting at some *local* computer which may be *internal* to the wired BNL campus LAN or maybe *external* on a BNL wireless or non-BNL network and you wish to access a *remote, internal* WCWC account.
+To allow for transparent remote access across different local accounts, you are recommended to implement the guidance in this section.
+
+First, place the following text at the top of =~/.ssh/config= file and replace ~WCWCUSER~ with your WCWC user name:
+#+begin_example
+  # Override values for the SSH gateways themselves and for *.phy aliases
+  Host *.phy ssh.phy.bnl.gov physsh.phy.bnl.gov gateway.phy.bnl.gov 
+       # Do not jump through a gateway to access a gateway.
+       ProxyJump none
+
+  # All hosts in the Physics department subnet
+  Host *.phy.bnl.gov
+       # Speed up any subsequent connections by reusing prior
+       ControlMaster auto
+       ControlPath ~/.ssh/%r@%h:%p
+       ControlPersist 10m
+       # Allow use of our local private keys for subsequent connections
+       ForwardAgent yes
+       # Allow X11 clients to display on our local X11 server
+       ForwardX11 yes
+       # No passwords, only keys
+       PreferredAuthentications publickey
+       # Jump through the main Physics SSH gateway on way to destination
+       ProxyJump WCWCUSER@ssh.phy.bnl.gov
+       # Put traffic to avoid unkind networks killing idle connections.
+       ServerAliveInterval 60
+       # Set remote user name, needed only if differs from remote.
+       # Can still "ssh otheruser@<host>.phy.bnl.gov
+       User WCWCUSER
+#+end_example
+#+begin_note
+This configuration works from both *internal* and *external* accounts and should be placed in both
+#+end_note
+
+Next, assure your *local* shell has access to an ~ssh-agent~ and that the agent has been loaded with SSH keys.  A good desktop environment (DE) will have started an ~ssh-agent~ for you.  You can check with:
+
+#+begin_example
+$ ssh-add -l
+#+end_example
+
+If that responds with:
+#+begin_example
+$ ssh-add -l
+Could not open a connection to your authentication agent.
+#+end_example
+then you must either fix your DE or manually start an agent at the shell level:
+#+begin_example
+$ ssh-agent /bin/bash
+#+end_example
+
+If ~ssh-add -l~ responds with:
+#+begin_example
+$ ssh-add -l
+The agent has no identities.
+#+end_example
+then you need to load your SSH private keys:
+
+#+begin_example
+$ ssh-add
+Enter passphrase for /home/bv/.ssh/id_rsa: 
+Identity added: /home/bv/.ssh/id_rsa (/home/bv/.ssh/id_rsa)
+$ ssh-add -l
+4096 SHA256:m0bjsB5xmh0hHqs927+hvi94Vhsdi0e5DArl+36qa4s /home/bv/.ssh/id_rsa (RSA)
+#+end_example
+If your SSH key files have non-standard file names, simply list them on the ~ssh-add~ command line (they lack the ~.pub~ file name extension).
+
+You can now make an unlimited chain of SSH connections starting from your local computer and on to any number of WCWC workstation accounts.
+#+begin_example
+bv@local$ ssh hierocles.phy.bnl.gov
+bviren@hierocles$ ssh wcgpu1.phy
+bviren@wcgpu1$
+#+end_example
+#+begin_note
+We used the short alias ~wcgpu1.phy~ that matches the ~*.phy~ given in the first ~Host~ line of =~/.ssh/config= in order to avoid jumping through the SSH gateway as ~hierocles~ is already *internal*.
+#+end_note
+
+
+* Admin
+
+This section describes specifics about administrating up WCWC workstations with a focus on initial setup into the BNL Physics department identity management (IDM) system (FreeIPA).
+
+** Workstation prerequisites
 
 Prior to enrollment a potential WCWC workstation must be:
 - running a supported and up-to-date operating system.
 - available via a static IP address allocated from BNL networking.
 - configured with the WCWC admin keys in ~/root/.ssh/authorized_keys~.
 
-* Hostname
+** Hostname
 
 The ~hostname~ command must resolve to a fully-qualified host name.  This can be assured with:
 
@@ -20,7 +136,10 @@ The ~hostname~ command must resolve to a fully-qualified host name.  This can be
 #+end_example
 
 
-* Basic configuration
+** Basic configuration
+:PROPERTIES:
+:CUSTOM_ID: ansible
+:END:
 
 - The enrolling workstation shall be given a baseline configuration via Ansible.
 
@@ -37,12 +156,8 @@ The WCWC admin runs:
 3. Test it is accessible
 4. Apply the baseline configuration
 
-* Intermission
 
-The above is sufficient for a WCWC workstation to exist in a stand-alone fashion.  The remaining document describes further integration allowing WCWC users to utilize the workstation.
-
-
-* User accounts
+** User accounts
 :PROPERTIES:
 :CUSTOM_ID: bnl-accounts
 :END:
@@ -52,7 +167,20 @@ The above is sufficient for a WCWC workstation to exist in a stand-alone fashion
 
 Note, the distributed account system is provided by an instance of the FreeIPA IDM which also includes features to configure WCWC services.  The text will refer to this service as "IDM".
 
-* Add user to IDM
+** Migrating a pre-existing ~/home~
+:PROPERTIES:
+:CUSTOM_ID: local-accounts
+:END:
+
+Local account ~$HOME~'s need adjusting if the workstation is a home provider or it will automount ~/home~.  Existing
+
+- The directory ~/nfs/home~ must exist and be populated with any local ~$HOME~ directories.
+- A preexisting direct-mount ~/home~ must have its ~/etc/fstab~ adjusted to mount the partition to ~/nfs/home~
+- A preexisting non-direct-mount ~/home~ must be moved to ~/nfs/home~.
+- The ~/home~ must exist and be empty prior to enrollment.
+
+
+** Add user to IDM
 :PROPERTIES:
 :CUSTOM_ID: freeipa-add-user
 :END:
@@ -77,10 +205,32 @@ Internally, FreeIPA assigns large user (and group) ID numbers while we wish to k
 1. ~Identity~ -> ~ID Views~ -> ~wcwc~ -> ~Users~ -> ~+Add~ 
 2. Fill in the user name and matching user login, desired UID matching GID, shell and home directory (~/home/USER~).
 3. SAVE
-See sections [[#user-ids]] and [[#home-dirs]] for more info on user IDs and home directories.  
+
+** Enroll workstation in the IDM 
+:PROPERTIES:
+:CUSTOM_ID: freeipa-enroll-host
+:END:
+
+To enroll a workstation, the WCWC admin must issue these commands as user root.
+
+#+begin_example
+  # ipa-client-install \
+    --server=idm3.phy.bnl.gov \
+    --server=idm2.phy.bnl.gov \
+    --server=idm1.phy.bnl.gov \
+    --server=idm.phy.bnl.gov \
+    --domain=phy.bnl.gov
+  # ipa-client-automount --server=idm.phy.bnl.gov --location=wcwc-u
+#+end_example
+Notes:
+- Ignore message ~conflicting time&date synchronization service 'ntp' will be disabled in favor of chronyd~
+- Answer "yes" to ~Proceed with fixed values and no DNS discovery?~
+- Answer "yes" to ~Do you want to configure chrony...~
+- May skip entering of NTP sources.
+- Enter authorized user credentials (WCWC admin) 
 
 
-* Add host to IDM
+** Configure host to IDM
 :PROPERTIES:
 :CUSTOM_ID: freeipa-add-host
 :END:
@@ -101,7 +251,7 @@ This may be required to finally get correct IDs:
   bviren:*:22351:22351:Brett Viren:/home/bviren:/usr/bin/fish
 #+end_example
 
-* ~$HOME~ provider
+** ~$HOME~ provider
 :PROPERTIES:
 :CUSTOM_ID: home-provider
 :END:
@@ -127,39 +277,8 @@ One may then change ownership for each directory listed.
 #+end_example
 
 
-* Migrating a pre-existing ~/home~
 
-- The directory ~/nfs/home~ must exist and be populated with any local ~$HOME~ directories.
-- A preexisting direct-mount ~/home~ must have its ~/etc/fstab~ adjusted to mount the partition to ~/nfs/home~
-- A preexisting non-direct-mount ~/home~ must be moved to ~/nfs/home~.
-- The ~/home~ must exist and be empty prior to enrollment.
-
-* Enroll workstation IDM 
-:PROPERTIES:
-:CUSTOM_ID: idm-enroll
-:END:
-
-
-- To enroll a workstation, the WCWC admin must issue these commands as user root.
-
-#+begin_example
-  # ipa-client-install \
-    --server=idm3.phy.bnl.gov \
-    --server=idm2.phy.bnl.gov \
-    --server=idm1.phy.bnl.gov \
-    --server=idm.phy.bnl.gov \
-    --domain=phy.bnl.gov
-  # ipa-client-automount --server=idm.phy.bnl.gov --location=wcwc-u
-#+end_example
-Notes:
-- Ignore message ~conflicting time&date synchronization service 'ntp' will be disabled in favor of chronyd~
-- Answer "yes" to ~Proceed with fixed values and no DNS discovery?~
-- Answer "yes" to ~Do you want to configure chrony...~
-- May skip entering of NTP sources.
-- Enter authorized user credentials (WCWC admin) 
-
-
-* ~$HOME~ for the homeless
+** ~$HOME~ for the homeless
 :PROPERTIES:
 :CUSTOM_ID: home-for-homeless
 :END:
@@ -192,12 +311,12 @@ Adding a "homeless" user requires variant of what is described in section [[#fre
 
 
 
-* Debugging autofs
+** Debugging autofs
 
 The use of autofs to NFS-mount ties together several things.
 - Adding a user's ~$HOME~, see section [[#freeipa-add-user]].
 - Setting up a home provider, see section [[#home-provider]].
-- Assuring the host is an ~ipa-client-automount~, see section [[#idm-enroll]].
+- Assuring the host is an ~ipa-client-automount~, see section [[#freeipa-enroll-host]].
 - Assuring ~auto_home.sh~ script exists. (run ansible playbook).
 
 On NFS-client, the *basic check* is:
@@ -274,13 +393,59 @@ And, finally, assure end result
 
 
 
-* 
+** Walk throughs
 
-* Internal data
+*** wcgpu1
+
+This is one of 2 dual-GPU "workstations".  They are integrated as "normal" workstations except that they are not home providers.  Here we walk through section [[#ansible]].
+
+#+begin_example
+$ ssh root@wcgpu1.bnl
+root@wcgpu1:~# hostname
+wcgpu1.phy.bnl.gov
+
+$ ssh hierocles.bnl
+❯ ansible workstations -m ping -l wcgpu1.phy.bnl.gov
+❯ ansible-playbook -l 'wcgpu1.phy.bnl.gov' ansible/playbooks/wcwc-workstation.yml
+#+end_example
+
+Following section [[#local-accounts]].
+
+#+begin_example
+root@wcgpu1:~# mkdir -p /nfs/home
+root@wcgpu1:~# emacs -nw /etc/fstab  # change /home to /nfs/home
+root@wcgpu1:~# mount /nfs/home
+#+end_example
+No new WCWC users associated with ~wcgpu*~ so skip section [[#freeipa-add-user]] and continue to section [[#freeipa-enroll-host]] performing both client install and automount commands and then section [[#freeipa-add-host]].
+#+begin_example
+  # service sssd restart
+  # service autofs restart
+  # getent passwd bviren
+  bviren:*:22351:22351:Brett Viren:/home/bviren:/usr/bin/fish
+  # ls -ld /home/bviren/
+  drwxr-xr-x 62 bviren bviren 4096 Aug 20 05:57 /home/bviren/
+  # ls -lnd /home/bviren/
+  drwxr-xr-x 62 22351 1601400019 4096 Aug 20 05:57 /home/bviren/
+  # ls -l /wcwc/spack/bin/spack
+  -rwxr-xr-x 1 1001 1001 1765 Aug 16 11:52 /wcwc/spack/bin/spack
+
+  $ ssh wcgpu1.bnl # full login check
+  
+#+end_example
+Again, as this is not a home provider, the rest of the steps above are skipped and we are done.
+
+Some todo items for ~wcgpu*~
+
+- [ ] move static IP from DE config to ~/etc/network/interfaces~
+- [ ] purge DE packages
+
+
+
+** Internal data
 
 TBD: how to share more than ~$HOME~.
 
-* External data
+** External data
 
 TBD: how to access eg FNAL or SDCC storage.
 
