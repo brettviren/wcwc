@@ -431,6 +431,7 @@ class Object:
 
         - config.yaml
         - concretizer.yaml
+        - packages.yaml
 
         Subclasses are encouraged to extend this method.
 
@@ -478,6 +479,14 @@ class Object:
         }
         self.scope_config("concretizer.yaml", dict(concretizer=concretizer_dat))
 
+        # default packages config
+        packages_dat = {
+            "all": {
+                "target": ["x86_64"]
+            }
+        }
+        self.scope_config("packages.yaml", dict(packages=packages_dat))
+        
 
     def scope_config(self, fname, dat):
         '''
@@ -891,6 +900,9 @@ def set_a_stack(with_spack=True):
 
 
 def make_env(ctx, stacks, target, environment, specs):
+    '''
+    Common body function for user and admin env command.
+    '''
 
     # Bring symmetry to the shared vs personal dichotomy.
     if stacks:
@@ -1351,6 +1363,7 @@ COPY wcwc /usr/local/bin/
 RUN useradd -ms /bin/bash wcwc && \
     mkdir -p /wcwc && \
     chown wcwc:wcwc /wcwc
+ENV SPACK_USER_CONFIG_PATH /wcwc/.spack
 # USER wcwc
 # WORKDIR /wcwc
 CMD ["bash"]
@@ -1358,7 +1371,6 @@ ENTRYPOINT ["wcwc"]
 '''.encode()
     context = Path(__file__).parent.absolute()
     podman(f'build -t {name} -f - {context}', capture_output=False, input=containerfile)
-
 
 
 @admin.command("builder")
@@ -1392,7 +1404,7 @@ def make_builder(ctx, name, force):
 
     
 
-@admin.command("env")
+@podman_command("env")
 @click.option("-S","--stacks", default=None, type=str,
               help="Comma-separated list of stack names which are upstreams to the environment")
 @click.option("-T", "--target", default=None, type=str, 
