@@ -369,16 +369,20 @@ We saw the use of "system" or "shared" environments in section [[#user-env]].  H
 
 To begin, we create a personal environment, based on a number of stacks and potentially with some number of initial specs:
 #+begin_example
-u$ wcwc make-env --help
+u$ wcwc env --help
 
-u$ wcwc make-env --stacks wirecell --environment my-env/ <spec> [...]
+u$ wcwc env --stacks wirecell --environment ~/my-wct-env wire-cell-toolkit/q3zolqz
+...
+==> Updating view at /home/wcwc/my-wct-env/.spack-env/view
 #+end_example
 Additional specs may be added by repeating this command listing just the new specs.
 
 We may then create a shell configured to use this environment similarly to how we did with system environments in section [[#user-env]] except that we give our environment directory instead of a name:
 #+begin_example
-u$ wcwc shell --environment my-env/
-e$
+u$ wcwc shell --environment ~/my-wct-env
+e$ wire-cell --help
+e$ exit
+u$
 #+end_example
 
 ** Installing packages to environments

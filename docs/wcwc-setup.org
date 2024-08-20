@@ -1,0 +1,17 @@
+#+STARTUP: content indent inlineimages logdrawer logredeadline entitiespretty
+#+options: ':t toc:t
+#+LATEX_HEADER: \usepackage[dvipsnames]{xcolor}
+#+LATEX_HEADER: \usepackage{siunitx}
+#+LATEX_HEADER: \usepackage[margin=1.0in]{geometry}
+#+LATEX_HEADER: \usepackage{framed}
+#+LATEX_HEADER: \usepackage{svg}
+#+LATEX_HEADER: \newenvironment{warning}{\color{red}\begin{framed}}{\ignorespacesafterend\end{framed}}
+#+LATEX_HEADER: \newenvironment{note}{\itshape\begin{framed}}{\ignorespacesafterend\end{framed}}
+#+OPTIONS: html-style:nil
+#+HTML_HEAD: <link rel="stylesheet" type="text/css" href="https://wirecell.bnl.gov/styles/readtheorg/css/htmlize.css"/>
+#+HTML_HEAD: <link rel="stylesheet" type="text/css" href="https://wirecell.bnl.gov/styles/readtheorg/css/readtheorg.css"/>
+#+HTML_HEAD: <script type="text/javascript" src="https://wirecell.bnl.gov/styles/lib/js/jquery.min.js"></script>
+#+HTML_HEAD: <script type="text/javascript" src="https://wirecell.bnl.gov/styles/lib/js/bootstrap.min.js"></script>
+#+HTML_HEAD: <script type="text/javascript" src="https://wirecell.bnl.gov/styles/lib/js/jquery.stickytableheaders.min.js"></script>
+#+HTML_HEAD: <script type="text/javascript" src="https://wirecell.bnl.gov/styles/readtheorg/js/readtheorg.js"></script>
+
