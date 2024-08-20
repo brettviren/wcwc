@@ -2,6 +2,22 @@
 
 This note collects information about specific packages.
 
+#+begin_example
+wcwc@wcgpu0:~$ export WCWC_PREFIX=$HOME/wcwc-dev
+wcwc@wcgpu0:~$ wcwc admin install -S wirecell wire-cell-toolkit@master+torch+cuda cuda_arch=89 target=x86_64
+wcwc@wcgpu0:~$ wcwc admin install -S wirecell wire-cell-toolkit@master+torch+cuda+root+hdf+glpk cuda_arch=89 target=x86_64
+wcwc@wcgpu0:~$ wcwc admin install -S wirecell wire-cell-prototype target=x86_64
+
+wcwc@wcgpu0:~$ rsync -av wcwc-dev/  wcwc@lycastus.phy.bnl.gov:/wcwc/
+#+end_example
+
+
+* Architecture target
+
+We use amd threadripper to build which can make binaries that won't work on older intel.  MUST set ~target=x86_64~ qualifier.
+
+** TODO bake this into ~packages.yaml~
+
 
 * CUDA
 
