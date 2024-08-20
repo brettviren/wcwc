@@ -966,10 +966,10 @@ def make_env(ctx, stacks, target, environment, specs):
 @click.option("-S","--stacks", default=None, type=str,
               help="Comma-separated list of stack names which are upstreams to the environment")
 @click.option("-e", "--environment", default=None, type=str, 
-              help="The name or directory for the environment")
+              help="The directory for the environment")
 @click.argument("specs", nargs=-1)
 @click.pass_context
-def user_env(ctx, stacks, target, environment, specs):
+def user_env(ctx, stacks, environment, specs):
     '''
     Create a user Spack Environment in a directory.
 
@@ -983,7 +983,7 @@ def user_env(ctx, stacks, target, environment, specs):
 
     This command is idempotent and may be repeated to add more specs.
     '''
-    make_env(ctx, stacks, target, environment, specs)
+    make_env(ctx, stacks, None, environment, specs)
 
 @cli.command("stacks")
 @click.pass_context
