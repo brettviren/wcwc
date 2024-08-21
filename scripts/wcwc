@@ -816,7 +816,7 @@ def use_stacks(with_spack=True, required=False):
         @click.pass_context
         @functools.wraps(func)
         def wrapper(ctx, stacks, *args, **kwds):
-            debug(f'use_stacks: {stacks}')
+            #debug(f'use_stacks: {stacks=} {args=} {kwds=}')
             if stacks is None:
                 stacks = ()
             elif stacks in ("all","known"):
@@ -835,12 +835,12 @@ def use_stacks(with_spack=True, required=False):
                         raise click.UsageError(f"required stack lacks: {path}.  Try 'wcwc init -n {stack.name}'?")
 
             kwds['stacks'] = stacks
-            if with_spack:
-                spack_exe = ctx.obj.spack.execfunc(
-                    stacks=stacks, capture_error=False,
-                    capture_output=False, check=False)
-                kwds['spack_exe'] = spack_exe
-
+            if not with_spack:
+                return func(*ags, **kwds)
+            
+            kwds['spack_exe'] = ctx.obj.spack.execfunc(
+                stacks=stacks, capture_error=False,
+                capture_output=False, check=False)
             return func(*args, **kwds)
         return wrapper
     return decorator
@@ -960,6 +960,53 @@ def make_env(ctx, stacks, target, environment, specs):
         spack_exe(f'-e {ename} add {spec}')
     if specs:
         spack_exe(f'-e {ename} concretize')
+
+def user_spack(command):
+    '''
+    Wrap a spack command to make it a wcwc user command
+    '''
+    def decorator(func):
+        @cli.command(command,
+                     context_settings={
+                         "ignore_unknown_options":True,
+                         "help_option_names":[],
+                     })
+        @use_stacks(with_spack=True, required=True)
+        @click.argument("spack_args", nargs=-1, type=click.UNPROCESSED)
+        @functools.wraps(func)
+        def wrapper(stacks, spack_exe, spack_args, *args, **kwds):
+            cli = [command]+list(spack_args)
+            #debug(f'spack wrapped: {cli=}')
+            proc = spack_exe(cli)
+            return func(proc)
+        return wrapper
+    return decorator
+
+@user_spack("spec")
+def spec(proc):
+    '''
+    Wrapper around spack spec.
+    '''
+    return proc.returncode
+
+@user_spack("find")
+def spack_find(proc):
+    '''
+    Find matching installed package instances.
+
+    This wraps "spack find" and accepts -S/--stages <stages>
+    '''
+    return proc.returncode
+
+@user_spack("list")
+def spack_list(proc):
+    '''
+    List matching package names (not instances).
+
+    This wraps "spack list" and accepts -S/--stages <stages>
+    '''
+    return proc.returncode
+
 
 
 @cli.command("env")
@@ -1124,7 +1171,7 @@ def do_shell(ctx, stacks, shell, output, command, environment, load, keep):
     if shell == "bash":
         cmd=["bash","--rcfile", rcfile.name]
         debug(f'execute: {" ".join(cmd)}')
-        os.execvpe("bash", cmd)  # does not return
+        os.execvpe("bash", cmd, env)  # does not return
     if shell == "fish":
         os.execvpe("fish", ["fish","-C", f"source {rcfile.name}"],env)
     if shell == "tcsh":
@@ -1270,6 +1317,8 @@ def list_os():
     '''
     for one in known_oses:
         info(one)
+
+
 
 
 # disable auto-help so we pass on "-h/--help" to spack.
