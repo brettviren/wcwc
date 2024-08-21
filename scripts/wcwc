@@ -1124,7 +1124,7 @@ def do_shell(ctx, stacks, shell, output, command, environment, load, keep):
     if shell == "bash":
         cmd=["bash","--rcfile", rcfile.name]
         debug(f'execute: {" ".join(cmd)}')
-        os.execvpe("bash", cmd)  # does not return
+        os.execvpe("bash", cmd, env)  # does not return
     if shell == "fish":
         os.execvpe("fish", ["fish","-C", f"source {rcfile.name}"],env)
     if shell == "tcsh":

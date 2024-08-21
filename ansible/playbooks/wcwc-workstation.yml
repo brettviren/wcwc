@@ -33,6 +33,7 @@
           - python3-yaml
           - rsync
           - unzip
+          - vim
           - zip
 
     - name: Provide auto_home.sh
