@@ -1,6 +1,23 @@
 #+title: BNL WCWC
 #+setupfile: wcwc-setup.org
 
+* meta :noexport:
+
+#+begin_src elisp :results none
+(setenv "PATH" (concat (getenv "PATH") ":" (expand-file-name "../scripts")))
+#+end_src
+
+#+begin_src sh :results output drawer
+scp wcwc-bnl.html wcwc-bnl.pdf hierocles.phy.bnl.gov:public_html/wire-cell/docs/
+#+end_src
+
+#+RESULTS:
+:results:
+:end:
+
+
+
+* Introduction
 
 This document uses terms from and extends [[file:wcwc.org]] with BNL-specific information.  In particular, review that document for definitions of *local*, *remote, internal*, *external*, etc.  Unless stated otherwise, WCWC refers here to the BNL instance.  The first section describes user and workstation enrollment in the BNL WCWC.  Then sections with specific information intended for BNL WCWC users and admins, respectively.  Specifications follow [[https://www.ietf.org/rfc/rfc2119.txt][RFC 2119]] language.
 

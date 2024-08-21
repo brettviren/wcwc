@@ -8,7 +8,7 @@
 #+end_src
 
 #+begin_src sh :results output drawer
-scp wcwc.html wcwc.pdf hierocles.bnl:public_html/wire-cell/docs/
+scp wcwc.html wcwc.pdf hierocles.phy.bnl.gov:public_html/wire-cell/docs/
 #+end_src
 
 #+RESULTS:
