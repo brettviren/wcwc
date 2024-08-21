@@ -18,8 +18,13 @@ scp wcwc-bnl.html wcwc-bnl.pdf hierocles.phy.bnl.gov:public_html/wire-cell/docs/
 
 
 * Introduction
+:PROPERTIES:
+:CUSTOM_ID: intro
+:END:
 
 This document uses terms from and extends [[file:wcwc.org]] with BNL-specific information.  In particular, review that document for definitions of *local*, *remote, internal*, *external*, etc.  Unless stated otherwise, WCWC refers here to the BNL instance.  The first section describes user and workstation enrollment in the BNL WCWC.  Then sections with specific information intended for BNL WCWC users and admins, respectively.  Specifications follow [[https://www.ietf.org/rfc/rfc2119.txt][RFC 2119]] language.
+
+The WCWC project has all (meta) files in the [[https://github.com/brettviren/wcwc][brettviren/wcwc]] GitHub repo.  Users of general WCWC features or the BNL WCWC instance are encouraged to report problems via that repository's GitHub Issues.  Any problems specific to non-BNL WCWC instances, should be reported elsewhere.
 
 * Enrollment
 :PROPERTIES:
@@ -27,6 +32,9 @@ This document uses terms from and extends [[file:wcwc.org]] with BNL-specific in
 :END:
 
 ** Workstation enrollment
+:PROPERTIES:
+:CUSTOM_ID: enroll-workstation
+:END:
 
 Enrollment of a workstation into the BNL WCWC is initiated by its BNL custodian ("owner") or a designee.  These steps shall be followed:
 
@@ -37,6 +45,10 @@ Enrollment of a workstation into the BNL WCWC is initiated by its BNL custodian 
 - A copy of the [[https://www.phy.bnl.gov/~bviren/wire-cell/docs/wcwc.pub][BNL WCWC admin SSH public]] keys is placed in ~/root/.ssh/authorized_keys~.
 
 ** User enrollment
+:PROPERTIES:
+:CUSTOM_ID: enroll-user
+:END:
+
 Every user must perform these tasks to enroll in the BNL WCWC:
 - Obtain a [[https://www.phy.bnl.gov/Accounts/][Physics department SSH account]].
 - Determine the home provider workstation.
@@ -51,42 +63,55 @@ BNL WCWC currently supports the Debian version 12 distribution of GNU/Linux (aka
 
 
 * User
+:PROPERTIES:
+:CUSTOM_ID: user
+:END:
 
+This section provides guidance specifically for users of the BNL WCWC.  See also [[file:wcwc.org::#user]].
+
+** OS packages
+:PROPERTIES:
+:CUSTOM_ID: os-packages
+:END:
+
+The BNL WCWC admin assures workstations have a common set of select OS packages to support ~wcwc~ user, developer and admin tasks.  In addition, generally useful packages may be installed across all workstations.  Users are welcome to contact the WCWC admin to request additional OS packages.  Section [[#ansible]] describes the mechanism for assuring these OS packages.
 
 ** Remote access
+:PROPERTIES:
+:CUSTOM_ID: remote-access
+:END:
+
 
 Remote access is when you the user are sitting at some *local* computer which may be *internal* to the wired BNL campus LAN or maybe *external* on a BNL wireless or non-BNL network and you wish to access a *remote, internal* WCWC account.
 To allow for transparent remote access across different local accounts, you are recommended to implement the guidance in this section.
 
-First, place the following text at the top of =~/.ssh/config= file and replace ~WCWCUSER~ with your WCWC user name:
+As one example, place the following text at the top of =~/.ssh/config= file and replace ~WCWCUSER~ with your WCWC user name:
 #+begin_example
-  # Override values for the SSH gateways themselves and for *.phy aliases
-  Host *.phy ssh.phy.bnl.gov physsh.phy.bnl.gov gateway.phy.bnl.gov 
-       # Do not jump through a gateway to access a gateway.
-       ProxyJump none
+Host *.phy
+	User WCWCUSER
+	ProxyJump WCWCUSER@ssh.phy.bnl.gov
+        Hostname %h.bnl.gov
+	ControlMaster auto
+	ControlPath ~/.ssh/%r@%h:%p
+	ControlPersist 10m
+	ForwardAgent yes
+	ForwardX11 yes
+	PreferredAuthentications publickey
+	ServerAliveInterval 60
 
-  # All hosts in the Physics department subnet
-  Host *.phy.bnl.gov
-       # Speed up any subsequent connections by reusing prior
-       ControlMaster auto
-       ControlPath ~/.ssh/%r@%h:%p
-       ControlPersist 10m
-       # Allow use of our local private keys for subsequent connections
-       ForwardAgent yes
-       # Allow X11 clients to display on our local X11 server
-       ForwardX11 yes
-       # No passwords, only keys
-       PreferredAuthentications publickey
-       # Jump through the main Physics SSH gateway on way to destination
-       ProxyJump WCWCUSER@ssh.phy.bnl.gov
-       # Put traffic to avoid unkind networks killing idle connections.
-       ServerAliveInterval 60
-       # Set remote user name, needed only if differs from remote.
-       # Can still "ssh otheruser@<host>.phy.bnl.gov
-       User WCWCUSER
+Host *.phy.bnl.gov
+	User WCWCUSER
+	ProxyJump none
+	ControlMaster auto
+	ControlPath ~/.ssh/%r@%h:%p
+	ControlPersist 10m
+	ForwardAgent yes
+	ForwardX11 yes
+	PreferredAuthentications publickey
+	ServerAliveInterval 60
 #+end_example
 #+begin_note
-This configuration works from both *internal* and *external* accounts and should be placed in both
+This configuration will work when used in both *internal* and *external* accounts.  However, it relies on the you the user to use a host name like ~wcgpu1.phy~ when a jump through the SSH gateway is needed and ~wcgpu1.phy.bnl.gov~ when it isn't.  See below for more advanced configuration that allow for transparent access regardless of what network the local account resides.
 #+end_note
 
 Next, assure your *local* shell has access to an ~ssh-agent~ and that the agent has been loaded with SSH keys.  A good desktop environment (DE) will have started an ~ssh-agent~ for you.  You can check with:
@@ -123,20 +148,65 @@ If your SSH key files have non-standard file names, simply list them on the ~ssh
 
 You can now make an unlimited chain of SSH connections starting from your local computer and on to any number of WCWC workstation accounts.
 #+begin_example
-bv@local$ ssh hierocles.phy.bnl.gov
-bviren@hierocles$ ssh wcgpu1.phy
+bv@local$ ssh hierocles.phy
+bviren@hierocles$ ssh wcgpu1.phy.bnl.gov
 bviren@wcgpu1$
 #+end_example
 #+begin_note
-We used the short alias ~wcgpu1.phy~ that matches the ~*.phy~ given in the first ~Host~ line of =~/.ssh/config= in order to avoid jumping through the SSH gateway as ~hierocles~ is already *internal*.
+We used the short alias ~wcgpu1.phy~ that matches the ~*.phy~ given in the first ~Host~ line of =~/.ssh/config= in order to jump through the SSH gateway as ~hierocles~ is already *internal*.  After that, real host names may be used.  If the workstation has proper DNS configuration (~search~ and ~domain~) then the simple hostname may be used (eg ~ssh wcgpu1~).
+#+end_note
+
+** Advance remote access
+:PROPERTIES:
+:CUSTOM_ID: advanced-remote-access
+:END:
+
+
+The above =~/.ssh/config= suffers from requiring the user to use different host names when the local computer is on different networks.  There are a few ways to add network transparency to the configuration.  One such way is the following:
+#+begin_example
+Host *.bnl.gov
+        User WCWCUSER
+        ControlMaster auto
+        ControlPath ~/.ssh/%r@%h:%p
+        ControlPersist 10m
+        Hostname %h
+        ForwardAgent yes
+        ForwardX11 yes
+        PermitLocalCommand yes
+        PreferredAuthentications publickey
+        ServerAliveInterval 60
+
+# Avoid loop, do not proxy jump when going to an SSH gateway
+Match originalhost ssh.phy.bnl.gov 
+        ProxyJump none
+Match originalhost physsh.phy.bnl.gov 
+        ProxyJump none
+Match originalhost gateway.phy.bnl.gov 
+        ProxyJump none
+# But otherwise proxy jump.  Note, ssh.phy.bnl.gov is only in external BNL DNS.
+Match originalhost *.phy.bnl.gov !Exec "ip route get 1 | grep -q 130.199.22.24"
+        ProxyJump WCWCUSER@ssh.phy.bnl.gov
+#+end_example
+While the user is suggested to try this advanced configuration if they wish to have the same =~/.ssh/config= in both internal and external accounts, the rest of this document will assume the configuration in section [[#remote-access]].
+
+#+begin_note
+The ~Match~ keyword requires OpenSSH ca. version 6.5 and the "new style" ~ip~ command to work on the local computer.
 #+end_note
 
 
 * Admin
+:PROPERTIES:
+:CUSTOM_ID: admin
+:END:
+
 
 This section describes specifics about administrating up WCWC workstations with a focus on initial setup into the BNL Physics department identity management (IDM) system (FreeIPA).
 
 ** Workstation prerequisites
+:PROPERTIES:
+:CUSTOM_ID: admin-prereq
+:END:
+
 
 Prior to enrollment a potential WCWC workstation must be:
 - running a supported and up-to-date operating system.
@@ -144,6 +214,9 @@ Prior to enrollment a potential WCWC workstation must be:
 - configured with the WCWC admin keys in ~/root/.ssh/authorized_keys~.
 
 ** Hostname
+:PROPERTIES:
+:CUSTOM_ID: admin-hostname
+:END:
 
 The ~hostname~ command must resolve to a fully-qualified host name.  This can be assured with:
 
@@ -329,6 +402,10 @@ Adding a "homeless" user requires variant of what is described in section [[#fre
 
 
 ** Debugging autofs
+:PROPERTIES:
+:CUSTOM_ID: debug-autofs
+:END:
+
 
 The use of autofs to NFS-mount ties together several things.
 - Adding a user's ~$HOME~, see section [[#freeipa-add-user]].
@@ -411,8 +488,14 @@ And, finally, assure end result
 
 
 ** Walk throughs
+:PROPERTIES:
+:CUSTOM_ID: walk-thru
+:END:
 
 *** wcgpu1
+:PROPERTIES:
+:CUSTOM_ID: walk-thru-wcgpu1
+:END:
 
 This is one of 2 dual-GPU "workstations".  They are integrated as "normal" workstations except that they are not home providers.  Here we walk through section [[#ansible]].
 
@@ -421,9 +504,9 @@ $ ssh root@wcgpu1.bnl
 root@wcgpu1:~# hostname
 wcgpu1.phy.bnl.gov
 
-$ ssh hierocles.bnl
-❯ ansible workstations -m ping -l wcgpu1.phy.bnl.gov
-❯ ansible-playbook -l 'wcgpu1.phy.bnl.gov' ansible/playbooks/wcwc-workstation.yml
+local$ ssh hierocles.bnl
+internal$ ansible workstations -m ping -l wcgpu1.phy.bnl.gov
+internal$ ansible-playbook -l 'wcgpu1.phy.bnl.gov' ansible/playbooks/wcwc-workstation.yml
 #+end_example
 
 Following section [[#local-accounts]].
@@ -459,12 +542,46 @@ Some todo items for ~wcgpu*~
 
 
 ** Internal data
+:PROPERTIES:
+:CUSTOM_ID: internal-data
+:END:
 
 TBD: how to share more than ~$HOME~.
 
 ** External data
+:PROPERTIES:
+:CUSTOM_ID: external-data
+:END:
 
 TBD: how to access eg FNAL or SDCC storage.
+
+** Build host
+:PROPERTIES:
+:CUSTOM_ID: build-host
+:END:
+
+
+Typically, package building is performed in an account (~wcwc@wcgpu0~) on a faster host than the ~/wcwc~ NFS provider (~lycastus~).  As the ~/wcwc~ is mounted read-only, a writable copy is made in a non-canonical location, a state change is applied and the results returned.
+#+begin_example
+$ rsync -av wcwc@lycastus.phy.bnl.gov:/wcwc/ ~/wcwc-dev/  
+$ wcwc --prefix=$HOME/wcwc-dev admin install <spec>
+$ rsync -av ~/wcwc-dev/  wcwc@lycastus.phy.bnl.gov:/wcwc/
+#+end_example
+
+
+** External sync host
+:PROPERTIES:
+:CUSTOM_ID: sync-host
+:END:
+
+
+A home workstation or laptop or other computers that do not NFS-mount ~/wcwc~ may maintain a copy by periodically syncing with the central ~/wcwc~.
+
+#+begin_example
+wcwc@haiku:~$ rsync --del -a lycastus.bnl.phy.gov:/wcwc/ /wcwc/
+#+end_example
+
+The sync can be against any WCWC workstation.  To avoid extra network traversal, this example goes to the horses mouth but any workstation NFS_mounting ~/wcwc~ can also work.  If the user wishes to extend the local copy beyond what is on WCWC, they should omit the ~--del~ option.  Modifying the local copy entail commands as illustrated in section [[#build-host]].
 
 
 

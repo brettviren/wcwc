@@ -45,7 +45,7 @@ The following topics are covered in this document:
 
 - Administrative tasks such as initializing WCWC software ecosystem from a green field, installing software packages and other such things are in section [[#admin]].
 
-- User, developer and administrator interaction with WCWC software ecosystem is through a single command called ~wcwc~.  The section [[#nabs]] documents how ~wcwc~ works under the hood to automate various tasks.
+- Section [[#nabs]] documents how ~wcwc~ works under the hood to automate various tasks.
 
 ** Terms
 :PROPERTIES:
@@ -74,7 +74,11 @@ WCWC users and workstations must go through some enrollment process specific to 
 
 ** Software Ecosystem
 
-The remainder of this document focuses on the WCWC software ecosystem from the point of view of the (end) user, software developer and administrator.  The ecosystem is build with Spack via automation and policy applied by the ~wcwc~ command available from where you got this document.  It is assume the WCWC admin has arranged for ~wcwc~ to be provided in the user's ~$PATH~.
+The remainder of this document focuses on the WCWC /software ecosystem/ from the point of view of the (end) user, software developer and administrator.  The ecosystem is build with Spack via automation and policy applied by the ~wcwc~ command available from where you got this document.  It is assume the WCWC admin has arranged for ~wcwc~ to be provided in the user's ~$PATH~.
+
+** Project and problems
+
+The WCWC project has all (meta) files in the [[https://github.com/brettviren/wcwc][brettviren/wcwc]] GitHub repo.  Users of general WCWC features or the BNL WCWC instance are encouraged to report problems via that repository's GitHub Issues.  Any problems specific to non-BNL WCWC instances, should be reported elsewhere.
 
 * User
 :PROPERTIES:
@@ -85,7 +89,7 @@ This section is intended to be read by all users with emphasis for those that wi
 
 ** OS packages
 
-For end-user the set of OS packages needed to use ~wcwc~ is minimal:
+To simply run the ~wcwc~ command, the following packages are required:
 
 - lsb-release
 - git
@@ -94,8 +98,7 @@ For end-user the set of OS packages needed to use ~wcwc~ is minimal:
 - python3-yaml
 - python-is-python3
 
-For building packages and other aspects of WCWC more are required.
-Users may request the WCWC admin to install others across all workstations.
+Additional OS packages may be according to the policy for the particular WCWC instance.  See [[file:wcwc-bnl.org::#os-packages]] for the BNL WCWC OS package policy.
 
 ** Introduction of Spack and ~wcwc~
 
@@ -112,6 +115,29 @@ $ wcwc
 #+begin_src sh :exports results :results output :wrap example
 wcwc
 #+end_src
+
+#+RESULTS:
+#+begin_example
+Usage: wcwc [OPTIONS] COMMAND [ARGS]...
+
+  Operate on the WCWC software ecosystem.
+
+Options:
+  -L, --log-level TEXT   set logging level [default:info]
+  -l, --log-output TEXT  log to a file [default:stdout]
+  -p, --prefix TEXT      Specify WCWC Spack installation prefix (def=/wcwc)
+  -c, --config TEXT      Specify a config file
+  -h, --help             Show this message and exit.
+
+Commands:
+  admin   Commands to modify the WCWC installation.
+  env     Create a user Spack Environment in a directory.
+  envs    List the defined system/shared environments.
+  scopes  List known scopes
+  shell   Produce a configured shell environment.
+  show    Show information about a stack.
+  stacks  Show status about existence of known stacks.
+#+end_example
 
 
 #+begin_note
@@ -147,9 +173,13 @@ Usage: wcwc shell [OPTIONS]
   WCWC installation.  Instead use command in the "wcwc admin" group.
 
   This command supports a "cross product" of behavior along these dimensions:
-  - the shell flavor (fish, sh-like and csh-like) - the mode of supplying the
-  target environment (settings, command or shell) - the make up of the target
-  environment (base, load modules, activate environment)
+
+  - the shell flavor (fish, sh-like and csh-like)
+
+  - the mode of supplying the target environment (settings, command or shell)
+
+  - the make up of the target environment (base, load modules, activate
+  environment)
 
 Options:
   -S, --stacks TEXT               Comma-separated list of stack names, if
@@ -220,7 +250,40 @@ root [0] .q
 u$
 #+end_example
 
+*** Learning Spack package names
+:PROPERTIES:
+:CUSTOM_ID: spack-list
+:END:
+
+Spack package names may differ slightly from what may be expected.  To list matching packages (not installed package instances):
+#+begin_example
+$ wcwc list torch
+py-botorch                      py-torch              py-torch-spline-conv  py-torchmeta
+py-efficientnet-pytorch         py-torch-cluster      py-torchaudio         py-torchmetrics
+py-gpytorch                     py-torch-geometric    py-torchbenchmark     py-torchsummary
+py-pytorch-gradual-warmup-lr    py-torch-harmonics    py-torchdata          py-torchtext
+py-pytorch-lightning            py-torch-nvidia-apex  py-torchdiffeq        py-torchvision
+py-pytorch-sphinx-theme         py-torch-scatter      py-torchfile          py-vector-quantize-pytorch
+py-segmentation-models-pytorch  py-torch-sparse       py-torchgeo
+==> 27 packages
+#+end_example
+By default, the ~list~ command will only check for packages in the Spack stack and thus is blind to package provided by other stacks.  Additional stacks may be given:
+#+begin_example
+$ wcwc list wire-cell-toolkit
+==> 0 packages
+
+$ wcwc list -S wirecell wire-cell
+wire-cell-data  wire-cell-dependencies  wire-cell-extra  wire-cell-prototype  wire-cell-toolkit
+==> 5 packages
+#+end_example
+
+ 
 *** Specifying packages unambiguously
+:PROPERTIES:
+:CUSTOM_ID: spack-find
+:END:
+
+
 The example above when run in a full ecosystem will likely fail with some error like:
 #+begin_example
 u$ wcwc shell -l root
@@ -234,16 +297,17 @@ u$ wcwc shell -l root
 #+end_example
 This is because the simple name ~root~ does not unambiguously identify a single installed instance of the package ~root~.  No problem as the ~-l/--load~ command actually accepts a "sentence" written in domain specific language called a Spack "spec" that can unambiguously describe installed package instances.  See section [[#spec]] for a brief introduction.  To discover how to write a spec, one may list available packages in more detail:
 #+begin_example
-  u$ wcwc shell -c 'spack find -lv root'
+  u$ wcwc find -lv root
   -- linux-debian12-x86_64 / gcc@12.2.0 ---------------------------
   ra4vsyp root@6.32.02~aqua~arrow~cuda~cudnn+davix~dcache~emacs+examples~fftw~fits~fortran+gdml+gminimal~graphviz+gsl~http~ipo+math+minuit~mlp~mysql~opengl~postgres~pythia8+python~r+roofit~root7+rpath~shadow~spectrum~sqlite~ssl+tbb+threads~tmva~tmva-cpu~tmva-gpu~tmva-pymva~tmva-sofie+unuran~vc+vdt~veccore+x+xml~xrootd build_system=cmake build_type=Release cxxstd=17 generator=make patches=22af347,9de4aa6
   kl5ziao root@6.32.02~aqua~arrow~cuda~cudnn+davix~dcache~emacs+examples+fftw~fits~fortran+gdml+gminimal~graphviz+gsl~http~ipo+math+minuit+mlp~mysql+opengl~postgres~pythia8+python~r+roofit~root7+rpath~shadow+spectrum~sqlite~ssl+tbb+threads+tmva+tmva-cpu~tmva-gpu~tmva-pymva~tmva-sofie+unuran~vc+vdt~veccore+x+xml~xrootd build_system=cmake build_type=Release cxxstd=17 generator=make patches=22af347,9de4aa6
   ==> 2 installed packages
 #+end_example
 #+begin_note
-The ~spack find~ command can take a while as it must interrogate a large portion of the ecosystem.  In future, ~wcwc~ may provided this command directly. Your use of ~spack find~ may return different results depending on the state of the WCWC ecosystem.
+The ~find~ command can take a while as it must interrogate a large portion of the ecosystem. Your use of ~find~ may return different results depending on the state of the WCWC ecosystem.  
 #+end_note
-This ~spack find~ command gives a lot of information but for our purpose we need only to examine the versions and/or the list of variants are enabled (with a ~+~) or disabled (with a =~=) and then use short hash to reference the instance we wish to "load".
+
+This ~find~ command gives a lot of information but for our purpose we need only to examine the versions and/or the list of variants are enabled (with a ~+~) or disabled (with a =~=) and then use short hash to reference the instance we wish to "load".
 #+begin_example
 u$ wcwc shell -l root/ra4vsyp -c "root -l"
 root [0] .q
@@ -251,8 +315,11 @@ u$
 #+end_example
 
 *** One-shot commands
+:PROPERTIES:
+:CUSTOM_ID: one-shot
+:END:
 
-Above we used ~spack spec~ to enter an interactive shell and from there run a command (~root~).  The user must issue ~exit~ to finally return to the original shell.  When the intermediate interactive shell is not needed it is simpler to execute the desired command directly.  For example:
+Above we used ~wcwc spec~ to enter an interactive shell and from there run a command (~root~).  The user must issue ~exit~ to finally return to the original shell.  When the intermediate interactive shell is not needed it is simpler to execute the desired command directly.  For example:
 
 #+begin_example
 u$ wcwc shell --load root --command "root -l"
@@ -293,6 +360,10 @@ u$ wcwc shell -S <stackname> --environment <envname>
 
 
 *** Combining
+:PROPERTIES:
+:CUSTOM_ID: env-and-load
+:END:
+
 
 Environment Modules and Spack Environments may be used together:
 #+begin_example
@@ -306,9 +377,21 @@ u$
 #+end_example
 
 *** Shell mutation
+:PROPERTIES:
+:CUSTOM_ID: shell-mutation
+:END:
 
-At no point will any ~wcwc shell~ command modify the ....
 
+If you must mutate an existing shell session:
+#+begin_example
+u$ ssh shell -o sourceme
+u$ source sourcme
+u$ ...
+u$ exit
+(logout)
+#+end_example
+The calling shell environment is mutated and can not be undone.
+It is up to the user to remove the output script (~sourceme~) if/when desired.  
 
 ** A few Spack and WCWC concepts
 
@@ -328,7 +411,7 @@ $ wcwc shell --load root@6.30.06
 See the Spack documentation for details on [[https://spack.readthedocs.io/en/latest/basic_usage.html#sec-specs][spec]].  In WCWC one can discover installed package instances with:
 
 #+begin_example
-u$ wcwc shell --command "spack find root"
+u$ wcwc find root
 -- linux-debian12-x86_64_v3 / gcc@12.2.0 ------------------------
 root@6.30.06
 ==> 1 installed package
@@ -452,15 +535,23 @@ Commands:
 #+end_example
 
 ** Use of podman containers
+:PROPERTIES:
+:CUSTOM_ID: podman-builder
+:END:
+
 
 Most of the ~wcwc admin~ commands *must* run inside a podman container named ~wcwc-builder~.  This assures the installation environment is well controlled and reproducible while allowing flexibility as to how the ~/wcwc~ area is provided.  The podman image is implicitly created when needed but may be created explicitly:
 #+begin_example
 wcwc admin builder
 #+end_example
+This command is idempotent and an existing ~wcwc-builder~ container will not be overwritten by default.  In rare circumstances the image must be updated.  The existing image may be deleted and the above command rerun or a rebuild can be forced:
+#+begin_example
+wcwc admin builder --force
+#+end_example
 
 ** Bootstrap ~/wcwc~
 
-A non-standard ~--prefix~ location can be specified and ~wcwc admin~ commands that run inside the container will mount it at ~/wcwc~.  A new prefix needs to be "bootstrapped" by some one-time interactive use of the container.  This is needed to avoid ~spack bootstrap~ rerunning each time the container is used and to place the "user scope" outside of the containers ~/root~ and in a location that persists along with the rest of ~/wcwc~.
+When a new ~/wcwc~ area is brought to life, perhaps by specifying a noncanonical prefix via ~wcwc --prefix /path/to/wcwc~, a one-time bootstrap process is required.  Currently this requires manual, interactive commands to be typed in the builder container.
 
 #+begin_example
 $ wcwc --prefix=/path/to/wcwc admin shell 
@@ -468,17 +559,18 @@ root@8e42e1ff5dec:/# spack bootstrap root /wcwc/.spack/bootstrap
 root@8e42e1ff5dec:/# spack bootstrap now
 root@8e42e1ff5dec:/# exit
 #+end_example
-Observe ~spack bootstrap now~ causes clingo and other things to be downloaded and installed.
+Observe that ~spack bootstrap now~ causes clingo and other things to be downloaded and installed.
 
-Renter one more time:
+Renter the container one more time to check:
 #+begin_example
 $ wcwc --prefix=$HOME/wcwc-dev admin shell
 root@19e414c431e5:/# spack spec zlib
 #+end_example
-Observe that there are no bootstrap messages repeated.
+Observe that this time no bootstrap messages are shown.  
 
 ** Compilers
 
+t.b.d. defining OS-packaged and Spack-built compilers.
 
 
 ** Green field installation
@@ -498,12 +590,16 @@ $ export WCWC_PREFIX=/path/to/wcwc
 $ wcwc --prefix=/path/to/wcwc [...]
 #+end_example
 The command line overrides environment variable.  If a non-standard WCWC prefix is used, then it must be subsequently used by all users of the ~wcwc~ command.  We will assume henceforth that the default prefix is used.
+#+begin_note
+In section [[#podman-builder]] the use of a podman container image to install packages is introduced.  In the container the ~/wcwc~ path is always used.  Outside the container the ~WCWC_PREFIX~ or ~--prefix~ value is that of a host directory.  It will be mounted onto ~/wcwc~ in the container. 
+#+end_note
 
-To begin, we use ~wcwc~ to produce an initial configuration file named ~wcwc.yaml~ in the prefix:
+
+To begin, we use ~wcwc~ to produce an initial configuration file named ~wcwc.yaml~ in the prefix directory:
 #+begin_example
 $ wcwc admin defaults
 #+end_example
-Edit this file to change any git tags of stack git repositories and/or add/remove any stacks.  You may also consider redefining the install tree which will hold the installed packages.  Each stack may have its own install tree and/or they may have unique projections via the use of ~{namespace}~ in the pattern.
+The ~wcwc.yaml~ file provides high level parameters that govern how ~wcwc~ works.  Most should be left as-is with the exception of potentially changing the ~tag~ for one or more stack.  This can be needed if the Spack repo for the stack has had new releases for which ~wcwc~ has not seen updates.
 
 The base Spack and any other stacks can then be initialized simply with:
 #+begin_example
@@ -511,7 +607,12 @@ $ wcwc admin init spack
 $ wcwc admin init wirecell
 #+end_example
 The ~spack~ stack is treated special in that its scope is the usual "system" scope found here under ~/wcwc/spack/etc/spack/~.
-Files for the other stacks are placed under ~stacks/<stack>/~ subdirectory under the WCWC prefix to hold the scope and environments and potentially a unique install tree.  You may set/change configuration parameters by running ~init~ with various options.  See ~wcwc admin init --help~.
+Files for the other stacks are placed under ~stacks/<stack>/~ subdirectory under the WCWC prefix to hold the scope and environments and potentially a unique install tree.
+
+Instead of editing ~wcwc.yaml~ you may set/change configuration parameters by running ~init~ with various options.  For example, to use the current main branch for Spack:
+#+begin_example
+$ wcwc admin init --tag develop spack
+#+end_example
 
 
 ** Installing packages
@@ -520,22 +621,29 @@ Installing packages with ~wcwc~ requires naming their spec.  Eg:
 #+begin_example
 $ wcwc admin install root
 #+end_example
-This will install the "preferred" version (usually the newest) of the ~root~ package into the default stack (Spack itself with default WCWC configuration).
+This will install the "preferred" version of the ~root~ package into the default stack (Spack itself with default WCWC configuration).
+The preferred version is typically the newest release known to Spack with the default variants considered.
 
-To install a package into a stack one must name it.  For example, at the time of writing Spack does not build ~go-jsonnet~ but the ~wirecell~ stack does.
+Some packages that are not provided by the Spack repo may be provided by another *stack* and it is possible for a stack to provide a package of the same name as Spack or another stack.  To have ~wcwc~ consider a stack it must be named.  For example, at the time of writing Spack does not provide a ~go-jsonnet~ package but the ~wirecell~ stack does.
 #+begin_example
 $ wcwc admin install --stacks wirecell go-jsonnet
 #+end_example
-When multiple stacks are considered and more than one provide the named package, Spack will determine which to use (the one from the last repo registered).  In such a case, it is recommended to qualify the package name with the namespace.  In a contrived and not realistic example (the two stacks are mutually exclusive at the time of writing):
+When multiple stacks must are considered and they provide the same package, Spack will determine from which stack to take the package based on last-one-wins order.  Or the package name can be qualified by the stack's *namespace*. For example, two stacks provide ~go-jsonnet~:
 #+begin_example
 $ wcwc admin install --stacks wirecell,art wirecell.go-jsonnet
 #+end_example
+#+begin_note
+This is a contrived, unrealistic example as the two stacks are mutually incompatible at the time of writing.  It does not actually make sense to consider both together. 
+#+end_note
 
-As described in section [[#spec]], multiple instances of the same package may be installed.  It is at installation time that one may distinguish versions, variants and other parameters that maybe written in a spec.  For example to install a minimal and a maximal WCT of a specific version:
+As described in section [[#spec]], multiple instances of the same package may be installed.  It is at installation time that one may specify in detail what spec to install.  For example to install a minimal and a maximal WCT of a specific version:
 #+begin_example
-$ wcwc admin install -S wirecell wire-cell-toolkit@0.28.0~glpk~root~hdf
-$ wcwc admin install -S wirecell wire-cell-toolkit@0.28.0+glpk+root+hdf
+$ wcwc admin install -S wirecell wire-cell-toolkit@0.28.0
+$ wcwc admin install -S wirecell wire-cell-toolkit@0.28.0+glpk+root+hdf+cuda+torch+emacs
 #+end_example
+#+begin_note
+The spec to install can be left ambiguous.  Spack will remove ambiguity through its "concretization" process.  You may preview the concrete spec with ~wcwc spec -S wirecell wire-cell-toolkit~.  
+#+end_note
 
 ** Defining system environments
 
