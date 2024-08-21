@@ -133,9 +133,12 @@ Commands:
   admin   Commands to modify the WCWC installation.
   env     Create a user Spack Environment in a directory.
   envs    List the defined system/shared environments.
+  find    Find matching installed package instances.
+  list    List matching package names (not instances).
   scopes  List known scopes
   shell   Produce a configured shell environment.
   show    Show information about a stack.
+  spec    Wrapper around spack spec.
   stacks  Show status about existence of known stacks.
 #+end_example
 
