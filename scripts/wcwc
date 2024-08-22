@@ -935,7 +935,7 @@ def make_env(ctx, stacks, target, environment, specs):
         create_cmd = f'env create --dir {ename}'
         
     stacks = [ctx.obj.stacks[s] for s in stacks]
-    spack_exe = ctx.obj.spack.execfunc(stacks=stacks, capture_output=False)
+    spack_exe = ctx.obj.spack.execfunc(stacks=stacks, capture_output=True)
 
     if not epath.exists():
         spack_exe(create_cmd)
@@ -947,7 +947,7 @@ def make_env(ctx, stacks, target, environment, specs):
                 "repos": [s.path("repo",as_string=True) for s in stacks],
                 "config": {
                     "install_tree": {
-                        "root": str(epath / ".spack-env" / "opt"),
+                        # "root": str(epath / ".spack-env" / "opt"),
                         "projections": {
                             "all": '{namespace}/{architecture}/{compiler.name}-{compiler.version}/{name}-{version}-{hash}'
                         }
@@ -959,7 +959,7 @@ def make_env(ctx, stacks, target, environment, specs):
     for spec in specs:
         spack_exe(f'-e {ename} add {spec}')
     if specs:
-        spack_exe(f'-e {ename} concretize')
+        spack_exe(f'-e {ename} concretize --force')
 
 def user_spack(command):
     '''
@@ -1031,6 +1031,7 @@ def user_env(ctx, stacks, environment, specs):
     This command is idempotent and may be repeated to add more specs.
     '''
     make_env(ctx, stacks, None, environment, specs)
+    print(f'--> In WCWC, activate with: wcwc shell -e {environment}')
 
 @cli.command("stacks")
 @click.pass_context

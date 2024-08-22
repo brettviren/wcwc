@@ -6,3 +6,5 @@ latexmk-out
 *.txt
 my-*
 .direnv
+*.html
+*.pdf

@@ -1,0 +1,89 @@
+#+title: How to do various things on WCWC.
+#+setupfile: wcwc-setup.org
+
+This document collects various recipes to perform some specific tasks.  It assumes basic understanding of WCWC and the ~wcwc~ command (see [[file:wcwc.org]]) and in some cases assumes the BNL WCWC (see [[file:wcwc-bnl.org]]).  If there is something not here that you think would be useful to add, feel free to reach out to the WCWC admin or make an Issue or PR on the [[https://github.com/brettviren/wcwc][WCWC GitHub]].  
+
+* meta :noexport:
+
+#+begin_src elisp :results none
+(setenv "PATH" (concat (getenv "PATH") ":" (expand-file-name "../scripts")))
+#+end_src
+
+#+begin_src sh :results output drawer
+scp wcwc-howto.html wcwc-howto.pdf hierocles.phy.bnl.gov:public_html/wire-cell/docs/
+#+end_src
+
+#+RESULTS:
+:results:
+:end:
+
+* Listing packages inside a Spack Environment
+:PROPERTIES:
+:CUSTOM_ID: find-in-env
+:END:
+
+
+When a Spack Environment is "activated", Spack sees only the subset of packages
+that have been added to the environment when it was constructed.  Thus the usual ~find~ command may be used.
+
+#+begin_example
+$ wcwc shell -e <env-name-or-dir>
+$ wcwc find
+#+end_example
+
+* Use PyTorch
+
+** The ~py-torch~ spec
+
+In particular ~py-torch~ can require variants to be specified.  In particular with or without CUDA and in some cases the CUDA compute capability (aka CC aka ~cuda_arch~) must be included.  Some typical, though partially specified variants are:
+
+- ~py-torch~cuda~ :: CPU-only build
+- ~py-torch+cuda~ :: CPU+GPU build
+- ~py-torch+cuda cuda_arch=89~ :: CPU+GPU specifying the nVidia compute capability (CC) version 
+
+Not all CC versions may be available.  CC 8.9 (~89~) covers a large range of hardware (up to 40xx) and software versions (up to 11.x).  See [[file:wcwc-packages.org::#cuda]] for some details.
+
+To see all package instances that are available (but note section [[#find-in-env]]).
+#+begin_example
+$ wcwc find -lv py-torch
+#+end_example
+#+begin_src sh :exports results :results output :wrap example
+wcwc find -lv py-torch
+#+end_src
+
+#+RESULTS:
+#+begin_example
+-- linux-debian12-x86_64 / gcc@12.2.0 ---------------------------
+2dj527f py-torch@2.4.0~caffe2+cuda+cudnn~custom-protobuf~debug+distributed+fbgemm+gloo+kineto~magma~metal+mkldnn+mpi~nccl+numa+numpy+onnx_ml+openmp+qnnpack~rocm+tensorpipe~test~ucc+valgrind+xnnpack build_system=python_pip cuda_arch=89
+#+end_example
+Specifying an exact instance with the hash may be a useful shorthand: ~py-torch/2dj527f~.
+
+
+** Environment Module
+
+To use an installed version of ~py-torch~ via an Environment Module:
+#+begin_example
+$ wcwc shell -l 'py-torch+cuda'
+$ python -c 'import torch; print(torch.cuda.is_available())'
+True
+$ python -c 'import torch; print(torch.cuda.device_count())'
+2
+#+end_example
+
+** Spack Environment
+
+A Spack Environment with an added instance of ~py-torch~ can be made like:
+#+begin_example
+$ wcwc env -e py-torch-env "py-torch+cuda cuda_arch=89"
+--> In WCWC, activate with: wcwc shell -e wcwc-env
+
+$ wcwc shell -e wcwc-env
+$ python -c 'import torch; print(torch.cuda.is_available())'
+True
+$ python -c 'import torch; print(torch.cuda.device_count())'
+2
+#+end_example
+
+* Adding to an existing Spack Environment
+
+t.b.d. (currently broken)

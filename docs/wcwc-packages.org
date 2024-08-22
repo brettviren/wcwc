@@ -20,6 +20,10 @@ We use amd threadripper to build which can make binaries that won't work on olde
 
 
 * CUDA
+:PROPERTIES:
+:CUSTOM_ID: cuda
+:END:
+
 
 The main motivation for WCWC is to share workstation GPUs at BNL.   All are currently nVidia and so CUDA support is a must.  nVidia phases out support for old hardware in new software (kernel driver and libraries).  That landscape is complex and described by several things:
 
