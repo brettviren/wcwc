@@ -133,7 +133,8 @@ def run(cmd, lines=None, capture_error=True, **opts):
     the stdout and stderr being logged prior to throwing.
 
     capture_output option is True by default and is passed to subprocess.  Set
-    to False if you want stdout/stderr to not be captured.
+    to False if you want stdout/stderr to not be captured and flow freely to the
+    terminal.
 
     check option is False by default and passed to subprocess.  Set to True to
     make subprocess check the rc and maybe throw.  However, if capture_error is
@@ -150,6 +151,7 @@ def run(cmd, lines=None, capture_error=True, **opts):
     if not isinstance(cmd,str):
         debug(' '.join(cmd))
     rc = srun(cmd, **opts)  # throws
+
     if lines is None and capture_error and rc.returncode:
         error(f'command failed: {cmd}')
         out = rc.stdout.decode() if rc.stdout else ""
@@ -157,6 +159,11 @@ def run(cmd, lines=None, capture_error=True, **opts):
         err = rc.stderr.decode() if rc.stderr else ""
         error(f'error:\n{err}')
         rc.check_returncode()   # raise the exception
+    else:                       # try to do normal logging
+        if rc.stdout:
+            debug(rc.stdout.decode())
+        if rc.stderr:
+            debug(rc.stderr.decode())
 
     if lines is None:
         return rc
@@ -945,9 +952,15 @@ def make_env(ctx, stacks, target, environment, specs):
         yaml_merge_patch(epath / "spack.yaml", {
             "spack": {
                 "repos": [s.path("repo",as_string=True) for s in stacks],
+                "upstreams": {
+                    "builtin": {
+                        "install_tree": "/wcwc/opt/builtin"
+                    }
+                },
                 "config": {
+                    "source_cache": str(epath / "cache"),
                     "install_tree": {
-                        # "root": str(epath / ".spack-env" / "opt"),
+                        "root": str(epath / "opt"),
                         "projections": {
                             "all": '{namespace}/{architecture}/{compiler.name}-{compiler.version}/{name}-{version}-{hash}'
                         }
@@ -1277,7 +1290,10 @@ def podman_command(name=None, **cmddef):
             argv.append(f'--podman=disable')
             argv.pop(0)                  # remove "wcwc" it is hard-wired in entrypoint
 
-            pmargs = ["podman","run","-v",f'{ctx.obj.prefix}:/wcwc','-it','--rm',podman] + argv
+            pmargs = ["podman","run",
+                      "-v",f'{ctx.obj.prefix}:/wcwc',  # canonical /wcwc location
+                      "-v",f'{ctx.obj.prefix}/.spack:/root.spack',  # assure "user config path" is captured
+                      '-it','--rm',podman] + argv
             pmargs_str = ' '.join(pmargs)
             log.debug(f're-exec: {pmargs_str}')
             os.execvp("podman", pmargs)  # does not return

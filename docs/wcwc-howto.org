@@ -84,6 +84,16 @@ $ python -c 'import torch; print(torch.cuda.device_count())'
 2
 #+end_example
 
-* Adding to an existing Spack Environment
+* Add existing package to a Spack Environment
+
+The ~env~ command can simply be rerun.
+
+#+begin_example
+$ wcwc env -e test-env
+$ wcwc env -e test-env zstd
+$ wcwc shell -e test-env "zstd --version"
+#+end_example
+
+* Install a novel package to a Spack Environment
 
 t.b.d. (currently broken)
