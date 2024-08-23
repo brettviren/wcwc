@@ -45,6 +45,11 @@ wcwc_config_filename = "wcwc.yaml"
 # The (default) name for a podman image used to provide run time environment.
 wcwc_builder_image_name = "wcwc-builder"
 
+# cli option and env var names
+builder_image_flag="--builder-image"
+builder_image_env="WCWC_BUILDER_IMAGE"
+
+
 
 # Default config object which may be overridden by a config file.
 #
@@ -860,8 +865,8 @@ def set_a_stack(with_spack=True):
     def decorator(func):
         @click.option("--tag",default=None, type=str, 
                       help=f"override default git tag (tag/hash/branch)")
-        @click.option("--branch",default=None, type=str,
-                      help=f"override default branch")
+        # @click.option("--branch",default=None, type=str,
+        #               help=f"override default branch")
         @click.option("--url",default=None, type=str,
                       help=f"override default git url")
         @click.option("--remote",default="origin",
@@ -875,15 +880,15 @@ def set_a_stack(with_spack=True):
         @click.argument("name")
         @click.pass_context
         @functools.wraps(func)
-        def wrapper(ctx, name, tag, branch, url, remote, source_path, repo_path, depends, *args, **kwds):
+        def wrapper(ctx, name, tag, url, remote, source_path, repo_path, depends, *args, **kwds):
             stack = ctx.obj.set_stack(name)
             kwds['stack'] = stack
 
 
             if tag:
                 stack.set("tag", tag)
-            if branch:
-                stack.set("branch", branch)
+            # if branch:
+            #     stack.set("branch", branch)
             if url:
                 stack.set("url", url)
             if remote:
@@ -1034,7 +1039,7 @@ def spack_list(proc):
               help="The directory for the environment")
 @click.argument("specs", nargs=-1)
 @click.pass_context
-def user_env(ctx, stacks, environment, specs):
+def cmd_user_env(ctx, stacks, environment, specs):
     '''
     Create a user Spack Environment in a directory.
 
@@ -1053,7 +1058,7 @@ def user_env(ctx, stacks, environment, specs):
 
 @cli.command("stacks")
 @click.pass_context
-def check_stacks(ctx):
+def cmd_stacks(ctx):
     '''
     Show status about existence of known stacks.
     '''
@@ -1071,7 +1076,7 @@ def check_stacks(ctx):
 @cli.command("envs")
 @use_stacks(required=False, with_spack=False)
 @click.pass_context
-def list_environments(ctx, stacks):
+def cmd_user_envs(ctx, stacks):
     '''
     List the defined system/shared environments.
     '''
@@ -1091,7 +1096,7 @@ def list_environments(ctx, stacks):
 
 @cli.command("scopes")
 @click.pass_context
-def list_scope(ctx):
+def cmd_scopes(ctx):
     '''List known scopes'''
     for name, dat in ctx.obj.cfg['repos'].items():
         paths = ctx.obj.paths(name)
@@ -1107,7 +1112,7 @@ def list_scope(ctx):
               help="format to output print")
 @use_stacks(with_spack=False)
 @click.pass_context
-def show(ctx, format, stacks):
+def cmd_show(ctx, format, stacks):
     '''
     Show information about a stack.
     '''
@@ -1216,7 +1221,7 @@ def do_shell(ctx, stacks, shell, output, command, environment, load, keep):
 @click.option("-k", "--keep", is_flag=True, default=False,
               help="Retain settings file and emit its name (ignored for -o/--output)")
 @click.pass_context
-def user_shell(ctx, stacks, shell, output, command, environment, load, keep):
+def cmd_user_shell(ctx, stacks, shell, output, command, environment, load, keep):
     '''
     Produce a configured shell environment.
 
@@ -1234,7 +1239,7 @@ def user_shell(ctx, stacks, shell, output, command, environment, load, keep):
     do_shell(ctx, stacks, shell, output, command, environment, load, keep)
 
 @cli.command("version")
-def version():
+def cmd_version():
     'Print WCWC version'
     print(wcwc_version)
 
@@ -1257,53 +1262,58 @@ def podman_command(name=None, **cmddef):
     '''
     def decorator(func):
         @admin.command(name, **cmddef)
-        @click.option("--podman", default=wcwc_builder_image_name,
+        @click.option(builder_image_flag, default=wcwc_builder_image_name, type=str, envvar=builder_image_env,
                       help=f'Set builder image or no/off/disable/none to run directly or yes/on/enable for default={wcwc_builder_image_name}')
         @click.pass_context
         @functools.wraps(func)
-        def wrapper(ctx, podman, *args, **kwds):
+        def wrapper(ctx, builder_image, *args, **kwds):
 
-            if podman and podman.lower() in 'no off disable disabled none'.split():
-                podman = None
-            if podman and podman.lower() in 'yes on enable default'.split():
-                podman = wcwc_builder_image_name
+            # print(f'{builder_image=}')
 
-            if podman and (Path("/run/.containerenv").exists() or 'container' in os.environ):
-                debug(f'appear we are already in a container, not starting {podman}')
-                podman = None
+            if builder_image and builder_image.lower() in 'no off disable disabled none'.split():
+                builder_image = None
+            if builder_image and builder_image.lower() in 'yes on enable default'.split():
+                builder_image = wcwc_builder_image_name
 
-            if not podman:
+            if builder_image and (Path("/run/.containerenv").exists() or 'container' in os.environ):
+                debug(f'appear we are already in a container, not starting {builder_image}')
+                builder_image = None
+
+            if not builder_image:
                 return func(*args, **kwds)
 
             argv = list(sys.argv)
 
             # Option erasure.
+            doomed = list()
             for ind, arg in enumerate(argv):
-                # podman is explicitly set in mage entrypoint
-                if arg == '--podman':
-                    argv.pop(ind)
-                    argv.pop(ind+1)
+                # builder_image is explicitly set in image entrypoint
+                if arg == builder_image_flag:
+                    doomed += [ind, ind+1]
                     continue
-                if arg.startswith("--podman="):
-                    argv.pop(ind)
+                if arg.startswith(f'{builder_image_flag}='):
+                    doomed.append(ind)
                     continue
 
                 # we mount the real prefix to the default location inside the container.
                 if arg in ('-p','--prefix'):
-                    argv.pop(ind)
-                    argv.pop(ind)
+                    doomed += [ind, ind+1]
                     continue
                 if arg.startswith('--prefix='):
-                    argv.pop(ind)
+                    doomed.append(ind)
                     continue
+            doomed.sort()
+            doomed.reverse()
+            for ind in doomed:
+                argv.pop(ind)
                 
-            argv.append(f'--podman=disable')
+            argv.append(f'{builder_image_flag}=disable')
             argv.pop(0)                  # remove "wcwc" it is hard-wired in entrypoint
 
             pmargs = ["podman","run",
                       "-v",f'{ctx.obj.prefix}:/wcwc',  # canonical /wcwc location
                       "-v",f'{ctx.obj.prefix}/.spack:/root/.spack',  # assure "user config path" is captured
-                      '-it','--rm',podman] + argv
+                      '-it','--rm',builder_image] + argv
             pmargs_str = ' '.join(pmargs)
             log.debug(f're-exec: {pmargs_str}')
             os.execvp("podman", pmargs)  # does not return
@@ -1311,12 +1321,19 @@ def podman_command(name=None, **cmddef):
     return decorator
             
 
+@podman_command()
+def junk(*args, **kwds):
+    print(f'{args=} {kwds=}')
+    
+
+
+
 @admin.command("defaults")
 @click.option("-f","--force-overwrite", is_flag=True, default=False,
               help="Allow to overwrite existing file")
 @click.argument("output", nargs=-1)
 @click.pass_context
-def dump_config(ctx, output, force_overwrite):
+def cmd_defaults(ctx, output, force_overwrite):
     '''
     Emit a default config file.
 
@@ -1330,7 +1347,7 @@ def dump_config(ctx, output, force_overwrite):
     ctx.obj.save(output, overwrite=force_overwrite)
 
 @admin.command("check-os")
-def check_os():
+def cmd_check_os():
     """Check if current running OS is supported"""
     got = run("lsb_release -ds", lines=1)
     if got in known_oses:
@@ -1338,7 +1355,7 @@ def check_os():
     raise ValueError(f'not a supported OS: {got}')
 
 @admin.command("oses")
-def list_os():
+def cmd_oses():
     '''
     Print names of supported operating systems, one per line.
     '''
@@ -1466,14 +1483,14 @@ ENTRYPOINT ["wcwc"]
 
 
 @admin.command("builder")
-@click.option("-n","--name", default=wcwc_builder_image_name,
-              help='Name the builder image, default is "wcwc-builder"')
+@click.option(builder_image_flag, default=wcwc_builder_image_name, envvar=builder_image_env,
+              help='Name the podman builder image, default is "wcwc-builder"')
 @click.option("-f","--force", is_flag=True, default=False,
               help="Force a remake of the image if it exists")
 @click.pass_context
-def make_builder(ctx, name, force):
+def cmd_builder(ctx, builder_image, force):
     '''
-    Assure the builder podman image of the given name exists.
+    Assure the builder podman image exists.
 
     Default name is "wcwc-builder".
 
@@ -1489,7 +1506,7 @@ def make_builder(ctx, name, force):
     A copy of "wcwc" is burned into the image.  If the version of wcwc you are
     currently running is newer you may wish to -f/--force an image rebuild.
     '''
-    assure_builder_image(name, force)
+    assure_builder_image(builder_image, force)
 
 
         

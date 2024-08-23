@@ -552,24 +552,6 @@ This command is idempotent and an existing ~wcwc-builder~ container will not be 
 wcwc admin builder --force
 #+end_example
 
-** Bootstrap ~/wcwc~
-
-When a new ~/wcwc~ area is brought to life, perhaps by specifying a noncanonical prefix via ~wcwc --prefix /path/to/wcwc~, a one-time bootstrap process is required.  Currently this requires manual, interactive commands to be typed in the builder container.
-
-#+begin_example
-$ wcwc --prefix=/path/to/wcwc admin shell 
-root@8e42e1ff5dec:/# spack bootstrap root /wcwc/.spack/bootstrap
-root@8e42e1ff5dec:/# spack bootstrap now
-root@8e42e1ff5dec:/# exit
-#+end_example
-Observe that ~spack bootstrap now~ causes clingo and other things to be downloaded and installed.
-
-Renter the container one more time to check:
-#+begin_example
-$ wcwc --prefix=$HOME/wcwc-dev admin shell
-root@19e414c431e5:/# spack spec zlib
-#+end_example
-Observe that this time no bootstrap messages are shown.  
 
 ** Compilers
 

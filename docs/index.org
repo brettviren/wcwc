@@ -1,0 +1,6 @@
+#+title: WCWC documents
+
+- [[file:wcwc.org]] :: Main document for user/developer/admin of the WCWC ecosystem.
+- [[file:wcwc-bnl.org]] :: Document focused on the BNL WCWC instance.
+- [[file:wcwc-howto.org]] :: A list of concise recipes to perform various tasks in the WCWC ecosystem.
+- [[file:wcwc-packages.org]] :: Notes on specific packages, mostly relevant for admins.
