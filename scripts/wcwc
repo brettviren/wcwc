@@ -6,6 +6,8 @@ Utility to create, manage and use elements of a Wire-Cell Workstation Cluster.
 
 '''
 
+wcwc_version = "0.0.0"
+
 
 import os
 import sys
@@ -1230,6 +1232,11 @@ def user_shell(ctx, stacks, shell, output, command, environment, load, keep):
     - the make up of the target environment (base, load modules, activate environment)
     '''
     do_shell(ctx, stacks, shell, output, command, environment, load, keep)
+
+@cli.command("version")
+def version():
+    'Print WCWC version'
+    print(wcwc_version)
 
 
 ### ADMIN COMMANDS
