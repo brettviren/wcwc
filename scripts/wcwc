@@ -6,7 +6,7 @@ Utility to create, manage and use elements of a Wire-Cell Workstation Cluster.
 
 '''
 
-wcwc_version = "0.0.0"
+wcwc_version = "0.0.1"
 
 
 import os
