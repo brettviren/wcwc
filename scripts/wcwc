@@ -43,12 +43,7 @@ wcwc_prefix = "/wcwc"
 wcwc_config_filename = "wcwc.yaml"
 
 # The (default) name for a podman image used to provide run time environment.
-wcwc_builder_image_name = "wcwc-builder"
-
-# cli option and env var names
-builder_image_flag="--builder-image"
-builder_image_env="WCWC_BUILDER_IMAGE"
-
+wcwc_image = "wcwc-image"
 
 
 # Default config object which may be overridden by a config file.
@@ -795,6 +790,73 @@ def setup_logging(log_output, log_level):
 
     debug(f'logging to {log_output} at level {log_level}')
 
+def boolish(string, true, false, **kwds):
+    if not string:
+        return false
+    string = string.lower()
+    if string in "false no off disable disabled none".split():
+        return true
+    if string in "true yes on enable enabled".split():
+        return true
+    return kwds.get(string, string)
+
+def maybe_reexec(prefix, image, image_prefix):
+    '''
+    Munge argv and reexec inside podman image.
+
+    If image does not exist it is created.
+
+    Image must have "wcwc" as its ENTRYPOINT and is assumed to run as root.
+
+    In-image prefix depends on the value of image_prefix.
+    - looks false, no volume is mounted and no --prefix given
+    - looks true, use default prefix
+    - if "same" or "internal" use the same as outside the container
+    - else use what it names
+    '''
+    iamge = boolish(image, wcwc_image, None)
+    if image is None:
+        return
+    if Path("/run/.containerenv").exists() or 'container' in os.environ:
+        debug(f'we already in a container, not starting {image}')
+        return
+        
+    image_prefix = boolish(image_prefix, wcwc_prefix, None, same=prefix, internal=prefix)
+
+    assure_podman_image(image)
+
+    argv = list(sys.argv)
+    to_strip="-p --prefix -I --image -P --image-prefix"
+    doomed = list()
+    for ind, arg in enumerate(argv):
+        for one in to_strip:
+            if arg == one:
+                doomed += [ind, ind+1]
+                continue
+            if arg.startswith(f'{one}='):
+                doomed.append(ind)
+                continue
+    doomed.sort()
+    doomed.reverse()
+    for ind in doomed:
+        argv.pop(ind)
+    argv.pop(0)                 # remove "wcwc"
+
+    pmargs = ["podman","run"]
+    if prefix and image_prefix:
+        (Path(prefix) / '.spack').mkdir(parents=True, exist_ok=True)
+        pmargs += ['-v',f'{prefix}:{image_prefix}',
+                   '-v',f'{prefix}/.spack:/root/.spack']
+    pmargs += ['-it', '--rm', image]
+    pmargs.append(f'--image=false')
+    if image_prefix:
+        pmargs.append(f'--prefix={image_prefix}')
+    pmargs += argv              # original, surviving args
+
+    pmargs_str = ' '.join(pmargs)
+    debug(f're-exec: {pmargs_str}')
+    os.execvp("podman", pmargs)  # does not return
+
 
 # CLICK command line user interface
 
@@ -804,17 +866,25 @@ cmddef = dict(context_settings = dict(auto_envvar_prefix='WCWC',
               help="Specify a config file")
 @click.option("-p", "--prefix", default=wcwc_prefix, type=str,
               help=f"Specify WCWC Spack installation prefix (def={wcwc_prefix})")
+@click.option("-P", "--image-prefix", default=wcwc_prefix, type=str,
+              help=f"Specify WCWC Spack installation prefix inside container (def={wcwc_prefix})")
+@click.option("-I", "--image", default=None, type=str,
+              help=f'Name podman image, or a true-like term to enable default or false-like to disable (the default)')
 @click.option("-l","--log-output", multiple=True,
               help="log to a file [default:stdout]")
 @click.option("-L","--log-level", default="info",
               help="set logging level [default:info]")
 @click.group("wcwc", **cmddef)
 @click.pass_context
-def cli(ctx, config, prefix, log_output, log_level):
+def cli(ctx, config, prefix, image_prefix, image, log_output, log_level):
     '''
     Operate on the WCWC software ecosystem.
     '''
     setup_logging(log_output, log_level)
+    debug(f'{prefix=} {image=} {image_prefix=}')
+
+    maybe_reexec(prefix, image, image_prefix)  # does not return if rexec.
+
     debug(f'base group {sys.argv=}, {ctx.info_name=} {ctx.command.name=} {ctx.invoked_subcommand=} {ctx.params=}')
     ctx.obj = WCWC(prefix, config)
 
@@ -850,7 +920,7 @@ def use_stacks(with_spack=True, required=False):
 
             kwds['stacks'] = stacks
             if not with_spack:
-                return func(*ags, **kwds)
+                return func(*args, **kwds)
             
             kwds['spack_exe'] = ctx.obj.spack.execfunc(
                 stacks=stacks, capture_error=False,
@@ -1035,13 +1105,15 @@ def spack_list(proc):
 @cli.command("env")
 @click.option("-S","--stacks", default=None, type=str,
               help="Comma-separated list of stack names which are upstreams to the environment")
+@click.option("-T", "--target", default=None, type=str, 
+              help="The name of the stack in which the environment is placed (for system environments)")
 @click.option("-e", "--environment", default=None, type=str, 
               help="The directory for the environment")
 @click.argument("specs", nargs=-1)
 @click.pass_context
-def cmd_user_env(ctx, stacks, environment, specs):
+def cmd_env(ctx, stacks, target, environment, specs):
     '''
-    Create a user Spack Environment in a directory.
+    Create a Spack Environment in a directory.
 
     The -S/--stacks gives a list of stacks providing packages (aka Spack
     "upstreams").
@@ -1051,9 +1123,12 @@ def cmd_user_env(ctx, stacks, environment, specs):
     are not yet existing.  Thus, if the user does not have write permission to
     the install area, this command will fail.
 
+    The -T/--target indicates -e/--environment is a name for a system
+    environment and not a directory for a user environment.
+
     This command is idempotent and may be repeated to add more specs.
     '''
-    make_env(ctx, stacks, None, environment, specs)
+    make_env(ctx, stacks, target, environment, specs)
     print(f'--> In WCWC, activate with: wcwc shell -e {environment}')
 
 @cli.command("stacks")
@@ -1250,81 +1325,10 @@ def cmd_version():
 @click.pass_context
 def admin(ctx):
     '''
-    Commands to modify the WCWC installation.
+    Commands intended for an WCWC administrator.
     '''
     debug(f'admin group {sys.argv=}, {ctx.info_name=} {ctx.command.name=}')
                 
-
-def podman_command(name=None, **cmddef):
-    '''
-    Return a decorator for a command that should have been run under the
-    podman image.  The Image MUST be made as in the "builder" command.
-    '''
-    def decorator(func):
-        @admin.command(name, **cmddef)
-        @click.option(builder_image_flag, default=wcwc_builder_image_name, type=str, envvar=builder_image_env,
-                      help=f'Set builder image or no/off/disable/none to run directly or yes/on/enable for default={wcwc_builder_image_name}')
-        @click.pass_context
-        @functools.wraps(func)
-        def wrapper(ctx, builder_image, *args, **kwds):
-
-            # print(f'{builder_image=}')
-
-            if builder_image and builder_image.lower() in 'no off disable disabled none'.split():
-                builder_image = None
-            if builder_image and builder_image.lower() in 'yes on enable default'.split():
-                builder_image = wcwc_builder_image_name
-
-            if builder_image and (Path("/run/.containerenv").exists() or 'container' in os.environ):
-                debug(f'appear we are already in a container, not starting {builder_image}')
-                builder_image = None
-
-            if not builder_image:
-                return func(*args, **kwds)
-
-            argv = list(sys.argv)
-
-            # Option erasure.
-            doomed = list()
-            for ind, arg in enumerate(argv):
-                # builder_image is explicitly set in image entrypoint
-                if arg == builder_image_flag:
-                    doomed += [ind, ind+1]
-                    continue
-                if arg.startswith(f'{builder_image_flag}='):
-                    doomed.append(ind)
-                    continue
-
-                # we mount the real prefix to the default location inside the container.
-                if arg in ('-p','--prefix'):
-                    doomed += [ind, ind+1]
-                    continue
-                if arg.startswith('--prefix='):
-                    doomed.append(ind)
-                    continue
-            doomed.sort()
-            doomed.reverse()
-            for ind in doomed:
-                argv.pop(ind)
-                
-            argv.append(f'{builder_image_flag}=disable')
-            argv.pop(0)                  # remove "wcwc" it is hard-wired in entrypoint
-
-            pmargs = ["podman","run",
-                      "-v",f'{ctx.obj.prefix}:/wcwc',  # canonical /wcwc location
-                      "-v",f'{ctx.obj.prefix}/.spack:/root/.spack',  # assure "user config path" is captured
-                      '-it','--rm',builder_image] + argv
-            pmargs_str = ' '.join(pmargs)
-            log.debug(f're-exec: {pmargs_str}')
-            os.execvp("podman", pmargs)  # does not return
-        return wrapper
-    return decorator
-            
-
-@podman_command()
-def junk(*args, **kwds):
-    print(f'{args=} {kwds=}')
-    
 
 
 
@@ -1366,11 +1370,7 @@ def cmd_oses():
 
 
 # disable auto-help so we pass on "-h/--help" to spack.
-@podman_command("spack",
-                context_settings={
-                    "ignore_unknown_options":True,
-                    "help_option_names":[],
-                })
+@cli.command("spack")
 @use_stacks()
 @click.argument("args", nargs=-1, type=click.UNPROCESSED)
 @click.pass_context
@@ -1394,7 +1394,7 @@ def spack(ctx, stacks, spack_exe, args):
     return got.returncode
 
 
-@podman_command("install")
+@admin.command("install")
 @click.option("-S","--stack", default="spack", type=str, 
               help="The name of the stack in which to perform the installation")
 @click.argument("specs", nargs=-1)
@@ -1416,14 +1416,14 @@ def install(ctx, stack, specs):
     return got.returncode
     
 
-@podman_command("init")
+@admin.command("init")
 @click.option("--recurs", is_flag=True, default=True,
               help="recurs over upstreams, if any (default=False)")
 @click.option("--force", is_flag=True, default=False,
               help="force overwriting (default=False)")
 @set_a_stack(with_spack=False)
 @click.pass_context
-def init(ctx, recurs, force, stack):
+def cmd_admin_init(ctx, recurs, force, stack):
     '''
     Initialize support for the named stack.
 
@@ -1445,9 +1445,9 @@ def init(ctx, recurs, force, stack):
     stack.init(ctx.obj, recurs)
     
 
-def assure_builder_image(name=wcwc_builder_image_name, force=False):
+def assure_podman_image(name=wcwc_image, force=False):
     '''
-    Assure named builder image exists.
+    Assure named podman image exists.
     '''
 
     podman = which("podman", capture_error=False)
@@ -1480,101 +1480,6 @@ ENTRYPOINT ["wcwc"]
 '''.encode()
     context = Path(__file__).parent.absolute()
     podman(f'build -t {name} -f - {context}', capture_output=False, input=containerfile)
-
-
-@admin.command("builder")
-@click.option(builder_image_flag, default=wcwc_builder_image_name, envvar=builder_image_env,
-              help='Name the podman builder image, default is "wcwc-builder"')
-@click.option("-f","--force", is_flag=True, default=False,
-              help="Force a remake of the image if it exists")
-@click.pass_context
-def cmd_builder(ctx, builder_image, force):
-    '''
-    Assure the builder podman image exists.
-
-    Default name is "wcwc-builder".
-
-    Use the iamge like this:
-
-      podman run -v /path/to/wcwc:/wcwc:rw,U --userns=keep-id -it --rm [image-name] [wcwc-args]
-
-    The -v is required to provide storage for the /wcwc dir in the container.
-    If omitted, the (empty) /wcwc will be used, but then lost if --rm is kept.
-
-    The [wcwc-args] are as you may give to the "wcwc" command.
-
-    A copy of "wcwc" is burned into the image.  If the version of wcwc you are
-    currently running is newer you may wish to -f/--force an image rebuild.
-    '''
-    assure_builder_image(builder_image, force)
-
-
-        
-
-    
-
-@podman_command("env")
-@click.option("-S","--stacks", default=None, type=str,
-              help="Comma-separated list of stack names which are upstreams to the environment")
-@click.option("-T", "--target", default=None, type=str, 
-              help="The name of the stack in which the environment is placed")
-@click.option("-e", "--environment", default=None, type=str, 
-              help="The name or directory for the environment")
-@click.argument("specs", nargs=-1)
-@click.pass_context
-def admin_env(ctx, stacks, target, environment, specs):
-    '''
-    Create a named system/shared Spack Environment.
-
-    The -S/--stacks gives a list of stacks providing packages (aka Spack
-    "upstreams").
-
-    An optional list of specs describing packages to add to the environment may
-    be given.  These packages will be installed in a stack install tree if they
-    are not yet existing.  Thus, if the user does not have write permission to
-    the install area, this command will fail.
-
-    This command is idempotent and may be repeated to add more specs.
-
-    This command is subject to podman image usage.
-    '''
-    make_env(ctx, stacks, target, environment, specs)
-
-
-@podman_command("shell")
-@click.option("-S","--stacks", default=None, type=str, 
-              help="Comma-separated list of stack names, if needed to resolve environment")
-@click.option("-s", "--shell",
-              default="auto",
-              type=click.Choice(["sh","bash","dash","zsh","fish","csh","tcsh","auto"]),
-              help="Set the shell flavor, default:auto")
-@click.option("-o", "--output", default=None, type=str,
-              help='Emit shell settings to given output, "-" or "stdout" for emitting to standard output')
-@click.option("-c", "--command", type=str, default=None,
-              help="Execute the command in a configured shell")
-@click.option("-e", "--environment", default=None, type=str,
-              help="Use given Spack Environment to determine shell settings")
-@click.option("-l", "--load", type=str, default=[], multiple=True,
-              help="Load the given package spec")
-@click.option("-k", "--keep", is_flag=True, default=False,
-              help="Retain settings file and emit its name (ignored for -o/--output)")
-@click.pass_context
-def admin_shell(ctx, stacks, shell, output, command, environment, load, keep):
-    '''
-    Produce a configured shell environment.
-
-    WCWC admins should avoid using this to modify the WCWC installation.
-    Instead use command in the "wcwc admin" group.
-
-    This command supports a "cross product" of behavior along these dimensions:
-    - the shell flavor (fish, sh-like and csh-like)
-    - the mode of supplying the target environment (settings, command or shell)
-    - the make up of the target environment (base, load modules, activate environment)
-
-    This command is subject to podman image usage.
-    '''
-    do_shell(ctx, stacks, shell, output, command, environment, load, keep)
-
 
 
 def main():

@@ -123,23 +123,30 @@ Usage: wcwc [OPTIONS] COMMAND [ARGS]...
   Operate on the WCWC software ecosystem.
 
 Options:
-  -L, --log-level TEXT   set logging level [default:info]
-  -l, --log-output TEXT  log to a file [default:stdout]
-  -p, --prefix TEXT      Specify WCWC Spack installation prefix (def=/wcwc)
-  -c, --config TEXT      Specify a config file
-  -h, --help             Show this message and exit.
+  -L, --log-level TEXT     set logging level [default:info]
+  -l, --log-output TEXT    log to a file [default:stdout]
+  -I, --image TEXT         Name podman image in which to run,
+                           no/off/disable/none to run directly or
+                           yes/on/enable for "wcwc-builder", default=off
+  -P, --image-prefix TEXT  Specify WCWC Spack installation prefix inside
+                           container (def=/wcwc)
+  -p, --prefix TEXT        Specify WCWC Spack installation prefix (def=/wcwc)
+  -c, --config TEXT        Specify a config file
+  -h, --help               Show this message and exit.
 
 Commands:
-  admin   Commands to modify the WCWC installation.
-  env     Create a user Spack Environment in a directory.
-  envs    List the defined system/shared environments.
-  find    Find matching installed package instances.
-  list    List matching package names (not instances).
-  scopes  List known scopes
-  shell   Produce a configured shell environment.
-  show    Show information about a stack.
-  spec    Wrapper around spack spec.
-  stacks  Show status about existence of known stacks.
+  admin    Commands to modify the WCWC installation.
+  env      Create a Spack Environment in a directory.
+  envs     List the defined system/shared environments.
+  find     Find matching installed package instances.
+  list     List matching package names (not instances).
+  scopes   List known scopes
+  shell    Produce a configured shell environment.
+  show     Show information about a stack.
+  spack    A wrapper around spack for WCWC admins.
+  spec     Wrapper around spack spec.
+  stacks   Show status about existence of known stacks.
+  version  Print WCWC version
 #+end_example
 
 
@@ -147,7 +154,9 @@ Commands:
 If the above does not reflect what ~wcwc~ shows for you, then this document needs regenerating.
 #+end_note
 
-The top-level options shown above may be ignored by most users while all the commands except for ~admin~ are relevant.  Each command has its own help "page" which an be viewd like:
+The top-level options related to "image" control running the ~wcwc~ command inside a podman container.  This is primarily meant for expert users and WCWC admins.  More information on this feature is in section [[#podman-images]].  Similarly, the ~admin~ group of commands are intended for use by WCWC admins and may be ignored by users.
+
+Each command has its own help "page" which an be viewed like:
 #+begin_example
 $ wcwc <command> --help
 #+end_example
@@ -312,8 +321,10 @@ The ~find~ command can take a while as it must interrogate a large portion of th
 
 This ~find~ command gives a lot of information but for our purpose we need only to examine the versions and/or the list of variants are enabled (with a ~+~) or disabled (with a =~=) and then use short hash to reference the instance we wish to "load".
 #+begin_example
-u$ wcwc shell -l root/ra4vsyp -c "root -l"
+u$ wcwc shell -l root/ra4vsyp
+s$ root -l
 root [0] .q
+s$ exit
 u$
 #+end_example
 
@@ -344,21 +355,27 @@ Spack Environments can be of two types:
 - "personal" aka "developer" are fully defined, modified and owned by the user.
 Here, we show how to use system environments and in section [[#devenv]] describe use of a "personal" environments.
 
-To use an environment we must give its name to ~spack shell~
-#+begin_example
-u$ wcwc shell --environment <envname>
-e$
-#+end_example
-
 Available environments can be listed:
 #+begin_example
 u$ wcwc envs
 
 u$ wcwc envs --stacks all
+spack:
+==> No environments
+
+base:
+==> No environments
+
+wirecell:
+==> 1 environments
+    wct-master-gcc
 #+end_example
 As implied, in WCWC the environments are defined in the context of a WCWC "stack".  See section [[#stacks]] for more information on stacks.  To use an environment defined in a stack, one must name the stack:
 #+begin_example
-u$ wcwc shell -S <stackname> --environment <envname>
+u$ wcwc shell -S wirecell -e wct-master-gcc
+e$ wire-cell --help
+e$ exit
+u$
 #+end_example
 
 
@@ -388,9 +405,9 @@ u$
 If you must mutate an existing shell session:
 #+begin_example
 u$ ssh shell -o sourceme
-u$ source sourcme
-u$ ...
-u$ exit
+m$ source sourcme
+m$ ...
+m$ exit
 (logout)
 #+end_example
 The calling shell environment is mutated and can not be undone.
@@ -477,22 +494,32 @@ u$
 :END:
 
 
-When adding a spec to an environment as shown in section [[#personal-env]] we must only provide specs that describe packages installed in a stack.  It is also possible to install novel package instances directly to an environment.
+When adding a spec to an environment as shown in section [[#personal-env]] we must only provide specs that describe packages installed in a stack.  It is also possible to install novel package instances directly to an environment.  For now, this requires dropping down to ~spack~.
 
-Example t.b.d.
+#+begin_example
+u$ wcwc env --environment ~/test-env 
+--> In WCWC, activate with: wcwc shell -e /home/bv/test-env
+u$ wcwc shell -e /home/bv/test-env
+e$ spack install --add zstd@1.5.0
+...
+[+] /home/bv/test-env/opt/builtin/linux-debian12-x86_64/gcc-12.2.0/zstd-1.5.0-gpj2gvmgyrdmwi2gfk3rkdk4gdfwm5es
+==> Updating view at /home/bv/test-env/.spack-env/view
+#+end_example
+This example installs and adds an older version of ~zstd~ which is unlikely be an installed in order to observe that dependencies are taken from the central WCWC installation while ~zstd~ itself is built from scratch and installed into the environment area..
 
 ** Developer environments
 :PROPERTIES:
 :CUSTOM_ID: devenv
 :END:
 
-Personal environments may be easily used for developing software as all package files are collected into a single file system tree called the "view".  In the above example, the view directory is at:
+Personal environments may be easily used for developing software as all package files are collected into a single file system tree called the "view".  The view directory can be found at:
 
 #+begin_example
-my-env/.spack-env/view/
+$ ls ~/test-env/.spack-env/view/
+bin  include  lib  man
 #+end_example
 
-When the environment settings are activated (~wcwc shell -e my-env~) Spack defines a variable ~SPACK_ENV~ that points to the root directory.  This may then be used to configure build systems of software to be developed.  For example using ~waf~ or ~wcb~ from Wire-Cell Toolkit or Prototype we may execute:
+When the environment settings are activated (~wcwc shell -e test-env~) Spack defines a variable ~SPACK_ENV~ that points to the root directory.  This may then be used to configure build systems of software to be developed.  For example using ~waf~ or ~wcb~ from Wire-Cell Toolkit or Prototype we may execute:
 #+begin_example
 e$ ./wcb configure --prefix=$SPACK_ENV/.spack-env/view [...]
 e$ ./wcb install
@@ -507,7 +534,7 @@ In the case of WCT, this does two things.  It tells the build system to check in
 
 The WCWC administrator is responsible to assemble the original WCWC, assist with enrollment and populate ~/wcwc~ with packages, stacks, and environments.  Users wishing to make use of ~wcwc~ to supply software to their individual (non-clustered) laptops or workstations will also be an WCWC administrator.  This section describes ways that the ~wcwc~ command can assist in some of these tasks.
 
-Most of the software related tasks for the WCWC admin are performed with the subcommands of:
+The basic "user" commands are relevant for admin tasks and in addition some tasks not relevant to users are placed in the ~admin~ command group:
 #+begin_example
 $ wcwc admin
 #+end_example
@@ -520,37 +547,44 @@ wcwc admin
 #+begin_example
 Usage: wcwc admin [OPTIONS] COMMAND [ARGS]...
 
-  Commands to modify the WCWC installation.
+  Commands intended for an WCWC administrator.
 
 Options:
   -h, --help  Show this message and exit.
 
 Commands:
-  builder   Assure the builder podman image of the given name exists.
   check-os  Check if current running OS is supported
   defaults  Emit a default config file.
-  env       Create a named system/shared Spack Environment.
   init      Initialize support for the named stack.
   install   Install a package in the context of a stack.
   oses      Print names of supported operating systems, one per line.
-  shell     Produce a configured shell environment.
-  spack     A wrapper around spack for WCWC admins.
 #+end_example
 
-** Use of podman containers
+** Use of podman images
 :PROPERTIES:
-:CUSTOM_ID: podman-builder
+:CUSTOM_ID: podman-images
 :END:
 
+The ~wcwc~ command can execute itself in a podman container (using an image it creates) in order to enable these important features:
+- Tightly control the build host environment.
+- Decouple "apparent" and "real" path for ~WCWC_PREFIX~.
 
-Most of the ~wcwc admin~ commands *must* run inside a podman container named ~wcwc-builder~.  This assures the installation environment is well controlled and reproducible while allowing flexibility as to how the ~/wcwc~ area is provided.  The podman image is implicitly created when needed but may be created explicitly:
+By default, a fixed image is used.  That is, running the container does not produce a new image.  Instead, a "real" directory is mounted into the container to provide ~WCWC_PREFIX~.
+The WCWC admin should always use a podman image for ~wcwc admin install~ even when ~WCWC_PREFIX~ redirection is unnecessary.
+
+Any named image that does not exist will be created on the fly if they do not exist and ~wcwc~ will not change an existing image.  The default image name is ~wcwc-image~.  If a custom image is created it should have an ~ENTRYPOINT~ that runs ~wcwc~.
+
+The external (native host) ~WCWC_PREFIX~ and the location it is mounted in the container can be controlled.  Both default to ~/wcwc~.  
+
+Given "true'ish" prefix path or image names (true yes on enable enabled) the defaults are used and given "false'ish" (false no off disable disabled none) they are disabled.  Otherwise the paths/names are take as literal.
+
+A simple, if pointless exercising of the podman support is:
 #+begin_example
-wcwc admin builder
+$ wcwc -I yes -p /tmp/my-wcwc -P /weird/path/wcwc version
+...builds image if first time...
+0.0.2
 #+end_example
-This command is idempotent and an existing ~wcwc-builder~ container will not be overwritten by default.  In rare circumstances the image must be updated.  The existing image may be deleted and the above command rerun or a rebuild can be forced:
-#+begin_example
-wcwc admin builder --force
-#+end_example
+Some reasons as to why these options might be specified are discussed in section [[#green-field]].
 
 
 ** Compilers
@@ -559,6 +593,10 @@ t.b.d. defining OS-packaged and Spack-built compilers.
 
 
 ** Green field installation
+:PROPERTIES:
+:CUSTOM_ID: green-field
+:END:
+
 
 Starting from a "vanilla" computer, we describe how to construct the ~/wcwc~ area.  
 
@@ -568,25 +606,27 @@ In principle, multiple users may contribute to modifying ~/wcwc~ but that can le
 Future WCWC development may explore ways to allow multiple users and workstations to contribute to building out the ~/wcwc~ contents.
 #+end_note
 
+*** Preamble
+
 We start by selecting a location to store all the software.  Potentially 100s of GB or more may be required depending on how much software is installed.  By default, the ~/wcwc~ directory is used but a non-standard location may be set in one of two ways:
 #+begin_example
 $ export WCWC_PREFIX=/path/to/wcwc
+$ export WCWC_IMAGE=yes  # can also give some name to use non-standard image
 
-$ wcwc --prefix=/path/to/wcwc [...]
+### or
+
+$ wcwc --image=yes --prefix=/path/to/wcwc [...]
 #+end_example
-The command line overrides environment variable.  If a non-standard WCWC prefix is used, then it must be subsequently used by all users of the ~wcwc~ command.  We will assume henceforth that the default prefix is used.
+The command line overrides environment variable.  If a non-standard WCWC prefix is used, then it must be subsequently used by all users of the ~wcwc~ command.  We may use an external ~WCWC_PREFIX~ which is different than the prefix used in the container (eg, default ~/wcwc~) if we wish to utilize some build host that can not write to ~/wcwc~.  After doing new installations to ~/wcwc~ in the container we may ~rsync~ from the changes that were fed into the non-standard ~WCWC_PREFIX~ to an account that can write to the "real" ~/wcwc~.
+
+We will assume henceforth that the default prefix is used.
 #+begin_note
-In section [[#podman-builder]] the use of a podman container image to install packages is introduced.  In the container the ~/wcwc~ path is always used.  Outside the container the ~WCWC_PREFIX~ or ~--prefix~ value is that of a host directory.  It will be mounted onto ~/wcwc~ in the container. 
+In section [[#podman-images]] the use of a podman container image to install packages is introduced.  In the container the ~/wcwc~ path is always used.  Outside the container the ~WCWC_PREFIX~ or ~--prefix~ value is that of a host directory.  It will be mounted onto ~/wcwc~ in the container. 
 #+end_note
 
+*** Initialize
 
-To begin, we use ~wcwc~ to produce an initial configuration file named ~wcwc.yaml~ in the prefix directory:
-#+begin_example
-$ wcwc admin defaults
-#+end_example
-The ~wcwc.yaml~ file provides high level parameters that govern how ~wcwc~ works.  Most should be left as-is with the exception of potentially changing the ~tag~ for one or more stack.  This can be needed if the Spack repo for the stack has had new releases for which ~wcwc~ has not seen updates.
-
-The base Spack and any other stacks can then be initialized simply with:
+The base Spack and any other stacks can be initialized simply with:
 #+begin_example
 $ wcwc admin init spack
 $ wcwc admin init wirecell
@@ -594,7 +634,15 @@ $ wcwc admin init wirecell
 The ~spack~ stack is treated special in that its scope is the usual "system" scope found here under ~/wcwc/spack/etc/spack/~.
 Files for the other stacks are placed under ~stacks/<stack>/~ subdirectory under the WCWC prefix to hold the scope and environments and potentially a unique install tree.
 
-Instead of editing ~wcwc.yaml~ you may set/change configuration parameters by running ~init~ with various options.  For example, to use the current main branch for Spack:
+*** Options
+
+Prior to initialization, the file ~wcwc.yaml~ is read from the prefix directory in order to describe known stacks.
+You may explicitly create this file in order to customize before initializing.  
+#+begin_example
+$ wcwc admin defaults
+#+end_example
+Most likely configuration change is to a ~tag~.  Alternatively, ~wcwc.yaml~ parameters for the stack being initialized can be specified on the ~init~ command line:
+For example, to use the current main branch for Spack:
 #+begin_example
 $ wcwc admin init --tag develop spack
 #+end_example
@@ -632,10 +680,12 @@ The spec to install can be left ambiguous.  Spack will remove ambiguity through 
 
 ** Defining system environments
 
-Creating a system environment entails naming it and adding package instances and optionally assigning the target environment to hold the definition.
+Almost identically to defining user environments, the admin may define "system" environments.  These are defined under ~WCWC_PREFIX~ and so can be used by all users.  The only difference is:
+- Must run in a podman container if the general ~WCWC_PREFIX~ was built side one.
+- Must give ~-t/--target~ option to provide the stack that will hold the definition.
 
 #+begin_example
-$ wcwc admin env --target wirecell --environment wct-master-gcc wire-cell-toolkit/q3zolqz
+$ wcwc env --target wirecell --environment wct-master-gcc wire-cell-toolkit/q3zolqz
 
 $ wcwc envs --stacks all
 spack:
