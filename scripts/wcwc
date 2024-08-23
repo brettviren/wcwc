@@ -3,10 +3,10 @@
 '''
 Utility to create, manage and use elements of a Wire-Cell Workstation Cluster.
 
-
+Largely a wrapper around spack and podman.
 '''
 
-wcwc_version = "0.0.1"
+wcwc_version = "0.0.1-1-g8f8d93f"
 
 
 import os
