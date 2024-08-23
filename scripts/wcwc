@@ -951,10 +951,13 @@ def make_env(ctx, stacks, target, environment, specs):
     if not target:
         yaml_merge_patch(epath / "spack.yaml", {
             "spack": {
+                "concretizer": {
+                    "unify": "when_possible"
+                },
                 "repos": [s.path("repo",as_string=True) for s in stacks],
                 "upstreams": {
-                    "builtin": {
-                        "install_tree": "/wcwc/opt/builtin"
+                    "stacks": {
+                        "install_tree": "/wcwc/opt"
                     }
                 },
                 "config": {
@@ -972,7 +975,7 @@ def make_env(ctx, stacks, target, environment, specs):
     for spec in specs:
         spack_exe(f'-e {ename} add {spec}')
     if specs:
-        spack_exe(f'-e {ename} concretize --force')
+        spack_exe(f'-e {ename} concretize') # --force
 
 def user_spack(command):
     '''
@@ -1292,7 +1295,7 @@ def podman_command(name=None, **cmddef):
 
             pmargs = ["podman","run",
                       "-v",f'{ctx.obj.prefix}:/wcwc',  # canonical /wcwc location
-                      "-v",f'{ctx.obj.prefix}/.spack:/root.spack',  # assure "user config path" is captured
+                      "-v",f'{ctx.obj.prefix}/.spack:/root/.spack',  # assure "user config path" is captured
                       '-it','--rm',podman] + argv
             pmargs_str = ' '.join(pmargs)
             log.debug(f're-exec: {pmargs_str}')
