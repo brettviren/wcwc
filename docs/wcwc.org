@@ -526,6 +526,37 @@ e$ ./wcb install
 #+end_example
 In the case of WCT, this does two things.  It tells the build system to check in the "prefix" when auto-locating required dependencies and it uses the "prefix" as the installation target.  In the case where the environment and its view are filled with files from WCT itself, this installation merely overwrites the symlinks.
 
+** Spack View for development
+
+The kernel of a Spack Environment is a Spack View.  It may be used to create a simpler developer environment.  The user may supply the environment settings or optionally a [[https://direnv.net/][direnv]] ~.envrc~ file can be initialized to supply basic shell environment settings.  To create the view:
+
+The ~view~ command help page:
+#+begin_example
+$ wcwc view --help
+#+end_example
+
+#+begin_src sh :exports results :results output :wrap example
+wcwc view --help
+#+end_src
+
+#+RESULTS:
+#+begin_example
+Usage: wcwc view [OPTIONS] VIEW
+
+  Create a view directory given one or more seed specs.
+
+Options:
+  -S, --stacks TEXT   Set stacks to use as comma separated list
+  -e, --exclude TEXT  Exclude a spec from the view. Special 'seeds' excludes
+                      the seeds
+  -d, --direnv TEXT   Initialize a direnv .envrc in the given directory
+  -s, --seed TEXT     Supply a seed spec.
+  -f, --force         Force (re)making the view
+  -h, --help          Show this message and exit.
+#+end_example
+
+The use of ~-d/--direnv=/path~ means that with a direnv-enabled shell, ~cd~'ing to that ~/path~ will cause your shell to be configured to use the view.  This includes a Python virtual so that any ~pip install~ or ~python setup.py install~ commands install into the view directory.
+For a worked example, see [[file:wcwc-howto.org::#spack-view-wct]].
 
 * Administrator
 :PROPERTIES:

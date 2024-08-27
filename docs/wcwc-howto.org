@@ -84,6 +84,95 @@ $ python -c 'import torch; print(torch.cuda.device_count())'
 2
 #+end_example
 
+
+* Use Spack View to develop WCT
+:PROPERTIES:
+:CUSTOM_ID: spack-view-wct
+:END:
+
+The kernel of a Spack Environment is a Spack View.  This is simply a directory that is the union of all files of the packages from which it was constructed.
+
+** Determine seeds
+
+Views are populated starting from one or more "seed" package instances.  We may identify an installed instance of WCT that best matches the intent of our development with the usual ~wcwc find~:
+
+#+begin_example
+$ wcwc find -lv wire-cell-toolkit
+-- linux-debian12-x86_64 / clang@17.0.6 -------------------------
+jh6gdsn wire-cell-toolkit@0.28.0~cppjsonnet+cuda+emacs+glpk+hdf+root+tbb+torch build_system=generic cuda_arch=89 cxxstd=17
+ghw2if5 wire-cell-toolkit@master~cppjsonnet+cuda~emacs+glpk+hdf+root+tbb+torch build_system=generic cuda_arch=89 cxxstd=17
+
+-- linux-debian12-x86_64 / gcc@12.2.0 ---------------------------
+3pzitmq wire-cell-toolkit@master~cppjsonnet+cuda~emacs~glpk~hdf~root+tbb+torch build_system=generic cuda_arch=89 cxxstd=17
+q3zolqz wire-cell-toolkit@master~cppjsonnet+cuda~emacs+glpk+hdf+root+tbb+torch build_system=generic cuda_arch=89 cxxstd=17
+==> 4 installed packages
+#+end_example
+Our development will be to fix the "hio" package which requires HDF5 so select an instance with ~+hdf~ (~/q3z0lqz~).
+
+** Create the view
+We create the view with the following command.
+#+begin_example
+$ view -S wirecell -e wire-cell-toolkit -d hio-fix -s wire-cell-toolkit/q3zolqz hio-fix/local
+#+end_example
+The explanation of the arguments:
+- ~-S/--stacks~ names any WCWC software stacks providing required packages.  We name ~wirecell~ as that is what provides ~wire-cell-toolkit~.
+- ~-e/--exclude~ we want to exclude installation of WCT itself as we will be later installing our own from source.  Note, this must be a package name and not a spec.
+- ~-i/--ignore-conflicts~ will skip any files common to multiple packages which is usually benign.
+- ~-d/--direnv~ primes a direnv ~.envrc~ file under the given directory which may be used to define basic shell environment settings to make use of the view contents.  We'll place this one level above the view directory itself.
+- ~./hio-fix/local~ is the view directory.  We name it ~local/~ as its contents resemble what may be found under Unix's conventional ~/usr/local~.
+
+** Use the view
+
+#+begin_example
+$ cd hio-fix
+$ direnv allow
+#+end_example
+
+** Begin development
+
+#+begin_example
+$ git clone git@github.com:WireCell/wire-cell-python.git  python
+$ git clone git@github.com:WireCell/wire-cell-toolkit.git toolkit
+$ git checkout -t -b remove-h5cpp origin/remove-h5cpp
+
+$ cd python && pip install -e . && cd -
+
+$ cd toolkit
+$ ./wcb configure build --prefix=$PREFIX \
+     --with-cuda=no --with-libtorch=no \
+     --boost-mt --boost-libs=$PREFIX/lib \
+     --boost-include=$PREFIX/include
+$ cd -
+#+end_example
+The use of ~--prefix~ here instructs ~wcb~ to consider view contents when auto-locating dependencies. The ~PREFIX~ variable is set by the ~.envrc~ that ~wcwc view~ generated.  CUDA-related is disabled and Boost needs some help to find itself.
+
+** Using the development build
+
+To install the development version into the view directory, one may simply run:
+#+begin_example
+$ ./wcb install
+#+end_example
+This will allow ~wire-cell~ and libraries to be used based on the ~layout~ directive in the ~.envrc~ file.  As the developer enters an edit-build-test loop, the time needed for ~./wcb install~ is not welcome.  One may instead run WCT "in place" by extending the ~.envrc~ file:
+#+begin_example
+PATH_add $PWD/toolkit/build/apps
+path_add LD_LIBRARY_PATH $PWD/toolkit/build/{apps,aux,cuda,gen,hio,iface,img,pgraph,sig,sigproc,sio,tbb,util,root,clus}
+#+end_example
+Edit the ~LD_LIBRARY_PATH~ to taste.  To setup for using ~bats~:
+#+begin_example
+export BATS_LIB_PATH=$PWD/toolkit/test
+PATH_add $PWD/toolkit/test/bats/bin
+#+end_example
+And, to let WCT locate configuration files:
+#+begin_example
+path_add WIRECELL_PATH $PWD/toolkit/cfg
+path_add WIRECELL_PATH $HOME/opt/wire-cell-data
+#+end_example
+Note, when [[https://github.com/WireCell/wire-cell-spack/issues/14][this issue]] is fixed, we may locate ~wire-cell-data~ with a more portable path. 
+
+#+begin_note
+When rerunning ~wcwc view~ the ~.envrc~ file will be moved aside and rewritten.  Take care not to lose any customization.
+#+end_note
+
 * Add existing package to a Spack Environment
 
 The ~env~ command can simply be rerun.
