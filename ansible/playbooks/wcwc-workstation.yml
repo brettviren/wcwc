@@ -33,6 +33,7 @@
           - python3-yaml
           - rsync
           - screen
+          - tcsh
           - tmux
           - unzip
           - vim
