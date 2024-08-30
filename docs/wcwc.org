@@ -101,6 +101,9 @@ To simply run the ~wcwc~ command, the following packages are required:
 Additional OS packages may be according to the policy for the particular WCWC instance.  See [[file:wcwc-bnl.org::#os-packages]] for the BNL WCWC OS package policy.
 
 ** Introduction of Spack and ~wcwc~
+:PROPERTIES:
+:CUSTOM_ID: intro-spack-wcwc
+:END:
 
 The large software stacks for various projects and experiments are installed by the WCWC admin via Spack and made available to each WCWC workstation under the ~/wcwc~ directory.
 
@@ -164,6 +167,10 @@ $ wcwc <command> --help
 The remainder of this section describes how to use ~wcwc~ for common tasks that "end users" may require.  Subsequently in sections [[#devel]] and [[#admin]] we describe how to use ~wcwc~ for developers and cluster administrators, respectively.
 
 ** Shell environment
+:PROPERTIES:
+:CUSTOM_ID: wcwc-shell
+:END:
+
 
 To use software built by Spack, the user shell environment requires some settings.  The ~wcwc shell~ command provides a number of ways to achieve this.
 
@@ -222,6 +229,10 @@ Regardless of /mode/ the environment is modified according to specified loading 
 The following sub sections give examples of use of ~wcwc shell~.
 
 *** Minimal shell
+:PROPERTIES:
+:CUSTOM_ID: minimal-shell
+:END:
+
 Here perform minimal ~wcwc shell~ commands.  The results are not terribly useful other than to illustrate basic features.
 First, we may start a subshell:
 #+begin_example
@@ -245,6 +256,9 @@ Not all shells are supported for subshell or command modes.  When this limitatio
 #+end_note
 
 *** Using individual Spack packages
+:PROPERTIES:
+:CUSTOM_ID: load-package
+:END:
 
 Spack supports a method to configure shell environment for use of individual software packages that is called "Environment Modules".  This support is enabled when ~wcwc shell~ is called with one or more ~-l/--load~ options:
 
@@ -264,7 +278,7 @@ u$
 
 *** Learning Spack package names
 :PROPERTIES:
-:CUSTOM_ID: spack-list
+:CUSTOM_ID: package-names
 :END:
 
 Spack package names may differ slightly from what may be expected.  To list matching packages (not installed package instances):

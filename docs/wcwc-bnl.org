@@ -52,7 +52,7 @@ Enrollment of a workstation into the BNL WCWC is initiated by its BNL custodian 
 Every user must perform these tasks to enroll in the BNL WCWC:
 - Obtain a [[https://www.phy.bnl.gov/Accounts/][Physics department SSH account]].
 - Determine the home provider workstation.
-- User and admin coordinate on adjusting account IDs (see section [[#home-provider]])
+- User and admin coordinate on adjusting account IDs (see section [[#home-provider-uid]])
 
 ** Supported operating systems
 :PROPERTIES:
@@ -69,12 +69,33 @@ BNL WCWC currently supports the Debian version 12 distribution of GNU/Linux (aka
 
 This section provides guidance specifically for users of the BNL WCWC.  See also [[file:wcwc.org::#user]].
 
-** OS packages
+** Software packages
 :PROPERTIES:
-:CUSTOM_ID: os-packages
+:CUSTOM_ID: software-packages
 :END:
 
-The BNL WCWC admin assures workstations have a common set of select OS packages to support ~wcwc~ user, developer and admin tasks.  In addition, generally useful packages may be installed across all workstations.  Users are welcome to contact the WCWC admin to request additional OS packages.  Section [[#ansible]] describes the mechanism for assuring these OS packages.
+A goal of WCWC is to provide all software a user needs in a form that is consistent across all workstations in the cluster.  Such software is provided either by OS packages or by Spack.
+If you need some software follow these guidelines to find/get it:
+
+- Check what is installed on OS or Spack:
+  #+begin_example
+  $ dpkg -l | grep name
+
+  $ wcwc find | grep name
+  #+end_example
+- Check what could be installed on OS or Spack:
+  #+begin_example
+  $ apt-cache search name
+
+  $ wcwc list              # base spack stack
+  # wcwc list -S wirecell  # a dependent stack
+  #+end_example
+- Contact the WCWC admin for assistance by providing package names and any version constraints.  If software is not in OS or Spack or the available versions are not sufficient, there is some chance Spack packaging can be developed.  User involvement in that packaging process is encouraged but not required.
+
+Some software is out of scope to be provided by WCWC OS or Spack.
+- Copies of software under development by the user (but see [[file:wcwc.org::#devel]]).
+- Proprietary software (at least in general, special cases may be considered).
+
 
 ** Remote access
 :PROPERTIES:
@@ -193,6 +214,86 @@ While the user is suggested to try this advanced configuration if they wish to h
 The ~Match~ keyword requires OpenSSH ca. version 6.5 and the "new style" ~ip~ command to work on the local computer.
 #+end_note
 
+** Troubles
+:PROPERTIES:
+:CUSTOM_ID: ssh-troubles
+:END:
+
+
+*** I can't log into the SSH gateway
+
+Do you have an account? https://www.phy.bnl.gov/Accounts/
+
+Do you have an ~ssh-agent~ started?
+#+begin_example
+$ ssh-add -l
+Could not open a connection to your authentication agent
+$ ssh-agent /bin/bash
+#+end_example
+
+Do you have an ~ssh-agent~ but no keys?
+#+begin_example
+$ ssh-add -l
+The agent has no identities.
+$ ssh-add
+Enter passphrase for /home/USER/.ssh/id_rsa: 
+Identity added: /home/USER/.ssh/id_rsa (/home/USER/.ssh/id_rsa)
+$ ssh-add -l
+4096 SHA256:<fingerprint> /home/USER/.ssh/id_rsa (RSA)
+#+end_example
+The key must be the one provided when getting the SSH gateway account.
+
+*** I can not log into a WCWC workstation
+
+Do you have an ~ssh-agent~ started and loaded with your keys (see above)?
+
+Are you starting from an external account?  Then, see above for ~ssh-agent~ info and be sure to forward it:
+#+begin_example
+l$ ssh -A USER@ssh.phy.bnl.gov
+g$ ssh -A USER@workstation.phy.bnl.gov
+w$
+#+end_example
+
+Do you need to use a private key other than what is loaded into Physics dept IDM and you have access to the WCWC ~$HOME~ (eg you sit at a WCWC workstation and want to access another).  You must authorize the key in your own account:
+#+begin_example
+$ cat ~/.ssh/id_rsa.pub >> ~/.ssh/authorized_keys
+#+end_example
+
+Do you need to use a private key other than what is loaded into Physics dept IDM and you do not have access to your WCWC ~$HOME~ (eg your use WCWC in "homeless" mode)?
+Contact the WCWC admin.
+
+
+
+* Developer
+:PROPERTIES:
+:CUSTOM_ID: developer
+:END:
+
+** Become friends with GPUs
+:PROPERTIES:
+:CUSTOM_ID: gpu-friends
+:END:
+
+
+See what (nVidia) GPUs are available:
+#+begin_example
+$ nvidia-smi
+#+end_example
+Probe with PyTorch
+#+begin_example
+$ wcwc shell -l "py-torch+cuda cuda_arch=89"
+$ python -c 'import torch; print(torch.cuda.is_available())'
+True
+$ python -c 'import torch; print(torch.cuda.device_count())'
+2
+#+end_example
+#+begin_note
+If you see error like: 
+
+~UserWarning: CUDA initialization: CUDA unknown error - this may be due to an incorrectly set up environment, e.g. changing env variable CUDA_VISIBLE_DEVICES after program start. Setting the available devices to be zero.~
+
+Tell your WCWC admin to check if ~nvidia_uvm~ kernel module has become unloaded.
+#+end_note
 
 * Admin
 :PROPERTIES:
@@ -245,6 +346,7 @@ The WCWC admin runs:
 2. Add the fully qualified host name to the inventory
 3. Test it is accessible
 4. Apply the baseline configuration
+
 
 
 ** User accounts
@@ -341,9 +443,9 @@ This may be required to finally get correct IDs:
   bviren:*:22351:22351:Brett Viren:/home/bviren:/usr/bin/fish
 #+end_example
 
-** ~$HOME~ provider
+** UID on ~$HOME~ provider
 :PROPERTIES:
-:CUSTOM_ID: home-provider
+:CUSTOM_ID: home-provider-uid
 :END:
 
 - A WCWC user's ~$HOME~ must NFS-exported by a WCWC or non-WCWC "home provider" workstation.
@@ -367,7 +469,6 @@ One may then change ownership for each directory listed.
 #+end_example
 
 
-
 ** ~$HOME~ for the homeless
 :PROPERTIES:
 :CUSTOM_ID: home-for-homeless
@@ -380,7 +481,7 @@ Adding a "homeless" user requires variant of what is described in section [[#fre
 #+end_note
 
 1. FreeIPA: Identity -> User -> username -> User Groups -> +Add -> add to "wcwc".
-2. FreeIPA: Identity -> ID Views -> Users -> +Add -> Add user ID override (user, login, uid, gid, shell, home)
+2. FreeIPA: Identity -> ID Views -> ~wcwc~ -> Users -> +Add -> Add user ID override (user, login, uid, gid, shell, home)
 3. FreeIPA: Network Services -> wcwc-u -> auto.u -> +Add -> key: username, mount: 
 #+begin_example
 -fstype=nfs4 -sync,rw,soft,sec=sys,proto=tcp,port=2049 lycastus.phy.bnl.gov:/home/&
@@ -399,6 +500,30 @@ Adding a "homeless" user requires variant of what is described in section [[#fre
 #+end_example   
 
 
+** Annexed ~$HOME~ provider
+
+A workstation which is not yet a member of WCWC may be "annexed" to supply the ~$HOME~ for a user which is a member.  This requires manual configuration of the annexed workstation some of which must be undone if/when the workstation later becomes a full WCWC member.  Much of this configuration is in common with what must be done on a WCWC workstation except we will not automount WCWC ~$HOME~ and will leave the native ~/home~ in place.
+
+Here are the steps to take, assuming a Debian-like system.
+
+1. Adjust UID as in section [[#home-provider-uid]].
+2. ~apt install nfs-kernel-server~
+3. ~mkdir -p /nfs/home~
+4. Add ~/home /nfs/home none bind 0 0~ to ~/etc/fstab~
+5. One time ~mount /nfs/home~
+6. Configure NFS with following in ~/etc/exports~
+#+begin_example
+  /nfs		130.199.22.0/23(rw,sync,crossmnt,no_subtree_check,fsid=0)
+  /nfs/home	130.199.22.0/23(rw,sync,no_subtree_check)
+#+end_example
+7. [@7] One time  ~exportfs -av~ and ~showmount -e~ to check.
+8. FreeIPA: Identity -> User -> username -> User Groups -> +Add -> add to "wcwc".
+9. FreeIPA: Identity -> ID Views -> ~wcwc~ -> Users -> +Add -> Add user ID override (user, login, uid, gid, shell, home)
+10. FreeIPA: Network Services -> wcwc-u -> auto.u -> +Add -> key: username, mount: 
+#+begin_example
+-fstype=nfs4 -sync,rw,soft,sec=sys,proto=tcp,port=2049 ANNEXED.phy.bnl.gov:/home/&
+#+end_example
+
 
 
 ** Debugging autofs
@@ -409,7 +534,7 @@ Adding a "homeless" user requires variant of what is described in section [[#fre
 
 The use of autofs to NFS-mount ties together several things.
 - Adding a user's ~$HOME~, see section [[#freeipa-add-user]].
-- Setting up a home provider, see section [[#home-provider]].
+- Setting up a home provider, see section [[#home-provider-uid]].
 - Assuring the host is an ~ipa-client-automount~, see section [[#freeipa-enroll-host]].
 - Assuring ~auto_home.sh~ script exists. (run ansible playbook).
 
@@ -585,3 +710,16 @@ The sync can be against any WCWC workstation.  To avoid extra network traversal,
 
 
 
+** Misc checks
+
+Desktop machines may be configured to suspend when they are idle and sitting at GDM login.  To defeat this, edit ~/etc/gdm3/greeter.dconf-defaults~ to set these bits:
+#+begin_example
+[org/gnome/settings-daemon/plugins/power]
+sleep-inactive-ac-type='nothing'
+sleep-inactive-battery-timeout=0
+#+end_example
+And
+#+begin_example
+  # systemctl restart gdm3
+  # systemctl restart gdm
+#+end_example
