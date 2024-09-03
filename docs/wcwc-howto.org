@@ -95,17 +95,23 @@ A Spack View is simply a single directory tree that contains all files from a se
 This section will walk through creating a View based on an instance of ~wire-cell-toolkit~ for the purpose of fixing a bug in the HDF5 support.  The example can be adapted to produce a view based on other package instances and for other purposes.
 
 ** Configure your shell for ~direnv~
+:PROPERTIES:
+:CUSTOM_ID: configure-direnv
+:END:
 
 Follow the simple, one-time instructions here:
 
 https://direnv.net/docs/hook.html
 
-Hooking ~direnv~ is not required to make the view, just to use it.
+Hooking ~direnv~ into your shell is not required for simply making the view (section [[#create-view]]) but will be needed to use the view (starting with section [[#use-view]]).
 
-** Determine seeds
+** Determine specs to seed the view
+:PROPERTIES:
+:CUSTOM_ID: view-seeds
+:END:
 
-Find the unambiguous "spec" that describes packages that "seed" the view.  Files from the seed packages and their dependencies will be added to the view.
-
+A view is built given one or more instances of packages that are already installed in the general Spack install tree.  We must specify each seed package with an unambiguous "spec".  
+The most precise and robust way to do that is to supply the "hash" by which Spack identifies the package instance.  Available hashes for a given package can be discovered with:
 #+begin_example
 $ wcwc find -lv wire-cell-toolkit
 -- linux-debian12-x86_64 / clang@17.0.6 -------------------------
@@ -123,6 +129,10 @@ wire-cell-toolkit/q3zolqz
 #+end_example
 
 ** Create the view
+:PROPERTIES:
+:CUSTOM_ID: create-view
+:END:
+
 Generically, we create the view with a command like:
 #+begin_example
 $ wcwc view -S STACK -e EXCLUDE -d TOPDIR -s SEED/HASH TOPDIR/VIEWDIR
@@ -133,15 +143,50 @@ $ wcwc view -S wirecell -e wire-cell-toolkit -d hio-fix -s wire-cell-toolkit/q3z
 #+end_example
 The explanation of the arguments:
 - ~-S/--stacks~ names any WCWC software *stacks* providing required packages.  We name ~wirecell~ as that is what provides ~wire-cell-toolkit~.
-- ~-e/--exclude~ we want to *exclude* installation of WCT itself as we will be later installing our own from source.  Note, this must be a package name and not a spec.
-- ~-i/--ignore-conflicts~ will *skip* including files that are common to multiple packages (usually benign).
-- ~-d/--direnv~ defines the directory controlled by *direnv* 
+- ~-e/--exclude~ we want to *exclude* installation of WCT itself as we will be later installing our own from source.  A simple package name (not a more full spec) must be provided.  Omit this option if you plan to merely use WCT instead of build a development version.  You may start out as a user and convert to a developer, see section [[#convert-user-to-dev]].
+- ~-i/--ignore-conflicts~ will *skip* including files that are common to multiple packages.  This is required to ignore conflicts due to packages that pollute common paths, eg ~<view>/README~ files.
+- ~-d/--direnv~ defines the top level of a directory tree to be controlled by *direnv*.
 - ~./hio-fix/local~ defines the the *view* directory.
 
-If you plan to merely use ~wire-cell-toolkit~ (not develop) then omit the ~-e/--exclude~ option.
-See below for some explanation for choice of the ~-d/--direnv~ and view directories.
+** View tree structure
+:PROPERTIES:
+:CUSTOM_ID: view-tree
+:END:
+In section [[#create-view]] we placed the view directory as a subdirectory of the one controlled by ~direnv~.  It produces an initial structure like:
+#+begin_example
+./hio-fix/.envrc    # the direnv configuration file 
+./hio-fix/local/    # the Spack View directory tree
+#+end_example
+The name ~local/~ is chosen to be reminiscent of the traditional Unix prefix ~/usr/local~.  Like that, the view tree has the usual ~local/{bin,lib,include}~ areas.  This gives us "room" to add WCT and WC Python source in sibling directories (section [[#clone-source]]):
+#+begin_example
+./hio-fix/toolkit/  # wire-cell-toolkit source
+./hio-fix/python/   # wire-cell-python source
+#+end_example
+
+** Use the view
+:PROPERTIES:
+:CUSTOM_ID: use-view
+:END:
+
+We can now enter any directory under the top-level one and our shell environment will be automatically set:
+#+begin_example
+$ cd hio-fix/  
+# 1. Allow direnv to apply settings
+$ direnv allow
+# 2. Examine the direnv configuration file
+$ cat .envrc
+#+end_example
+1. We must "allow" ~direnv~ at least once.  After being allowed, ~direnv~ will remember for the future.  
+2. The ~.envrc~ file syntax is essentially that of ~bash~ with some additional commands defined by ~direnv~.  See the [[https://direnv.net/man/direnv-stdlib.1.html][direnv-stdlib(1)]] man page for a list of available commands.  
+The shell settings will be automatically undone by ~direnv~ by simply changing directory to be outside this tree:
+#+begin_example
+$ cd 
+#+end_example
 
 ** Destroy the view
+:PROPERTIES:
+:CUSTOM_ID: destroy-view
+:END:
 
 When the view is no longer required its directory may simple be removed:
 #+begin_example
@@ -153,99 +198,112 @@ You may of course wish to remove the top level directory as well:
 $ rm -rf hio-fix/
 #+end_example
 
-
-** Use the view
-
-To apply relevant shell settings, simply change to the directory tree we created.
+** Get the source
+:PROPERTIES:
+:CUSTOM_ID: clone-source
+:END:
+We will get the WC-toolkit and WC-python source.  If you are a WC developer with push privileges, you should clone the source via SSH keys using hte ~git@~ URL:
 #+begin_example
-$ cd hio-fix
-$ direnv allow
+  $ git clone git@github.com:WireCell/wire-cell-python.git  python
+  $ git clone git@github.com:WireCell/wire-cell-toolkit.git toolkit
 #+end_example
-We only need to ~direnv allow~ once or when we modify ~.envrc~ and ~direnv~ will notify us when it is needed.
+Otherwise, you may use the ~https://~ URLs or fork the package(s) to your own GitHub account and use those URLs.
 
-The shell settings will be automatically undone by ~direnv~ by simply changing directory to be outside this tree:
+** Customize ~.envrc~ for WCT
+:PROPERTIES:
+:CUSTOM_ID: custom-envrc
+:END:
+
+The ~wcwc view~ initializes ~.envrc~ as a generic starting point.  Here, we will customize it to provide support specifically for WCT development.  To start with 
 #+begin_example
-$ cd 
+  # Locate the "wire-cell" and other WCT programs.
+  PATH_add $PWD/toolkit/build/apps
+
+  # Locate the "bats" program and configure its load path.
+  PATH_add $PWD/toolkit/test/bats/bin
+  export BATS_LIB_PATH=$PWD/toolkit/test
+
+  # Locate WCT configuration files.
+  path_add WIRECELL_PATH $PWD/toolkit/cfg
 #+end_example
+The above is generic to any view-based WCT dev setup.  You may simply copy-paste it into your own ~.envrc~.
 
-
-** Begin development
-
-The development area will be layed out like this:
+Finally, we locate the ~wire-cell-data~ contents which is user specific:
 #+begin_example
-./hio-fix/.envrc    # the direnv configuration file 
-./hio-fix/local/    # the Spack View directory tree
-./hio-fix/toolkit/  # wire-cell-toolkit source
-./hio-fix/python/   # wire-cell-python source
+  path_add WIRECELL_PATH $HOME/opt/wire-cell-data
 #+end_example
-This layout motivates the ~-d/--direnv~ and view tree directories we used above when creating the view with ~wcwc view~.
-We populate the source and build it like:
+In the future, WC "data" configuration files will be provided as a Spack package (see [[https://github.com/WireCell/wire-cell-spack/issues/14][wire-cell-spack/issues/14]]).
+
+#+begin_note
+- After any modifications of ~.envrc~ we will be prompted for and must run ~direnv allow~ to authorize the changes.
+- Be aware that our custom ~.envrc~ file will be moved aside and replaced if we ever rerun ~wcwc view~.
+#+end_note
+
+** Install ~wire-cell-python~
+:PROPERTIES:
+:CUSTOM_ID: install-wcpython
+:END:
+
+Before installing the WCT package we will install the copy of ~wire-cell-python~ that was cloned in section [[#clone-source]].   This package is not strictly required in order to build or use WCT.  However, it provides various useful auxiliary commands and some WCT unit tests can make use of it.
 #+begin_example
-# Trigger direnv to apply the shell settings and see what it is doing.
-$ cd hio-fix/  
-$ cat .envrc
-
-# Clone wire-cell-python source and install it.
-$ git clone git@github.com:WireCell/wire-cell-python.git  python
-$ cd python
-$ pip install
-$ cd ..
-
-# Clone wire-cell-toolkit source.
-$ git clone git@github.com:WireCell/wire-cell-toolkit.git toolkit
-$ cd toolkit
-
-# Get a pre-existing development branch.
-$ git checkout -t -b remove-h5cpp origin/remove-h5cpp
-
-$ ./wcb configure build --prefix=$PREFIX \
-     --with-cuda=no --with-libtorch=no --with-root=no \
-     --boost-mt --boost-libs=$PREFIX/lib \
-     --boost-include=$PREFIX/include
-
-# All done for now, can leave the direnv tree and undo the shell settings.
-$ cd -
+  $ cd python
+  $ pip install -e "."
+  $ cd ..
 #+end_example
-The above can be typed without needing to understand the "why" but there are a few details that worth understanding:
-- The default ~.envrc~ file produced by ~wcwc view -d/--direnv~ will automatically configure the shell so that a Python virtual environment is activated.  If the View includes Python, that version will be used.  O.w. the system Python is used.  This allows the ~pip install~ command to "just work". 
-- The ~.envrc~ file also defines ~PREFIX~ to point to the view directory (~hio-fix/local/~).
+Here we use the standard Python tool ~pip~ to install the package.  Be sure to include the ~"."~ (quotes added for visibility) which tells ~pip~ to consider the package that is in the current working directory.  The ~-e~ is given to allow us to later edit the Python code and have our changes immediately available for running.  The package is installed into the Python virtual environment that ~direnv~ has created for us due to the ~layout python~ line in the ~.envrc~ file.  For this example, the location ~hio-fix/.direnv/python-X.Y.Z/~ is used.
+
+** Configure WCT builder
+:PROPERTIES:
+:CUSTOM_ID: configure-wct-build
+:END:
+WCT is built with the provided ~./wcb~ (wire-cell builder) tool.  In WCT, this tool is simply a copy of the plain [[https://waf.io/][waf]] command which can also be used.  
+
+
+#+begin_example
+  $ cd toolkit
+  $ ./wcb configure --prefix=$PREFIX \
+       --with-cuda=no --with-libtorch=no --with-root=no \
+       --boost-mt --boost-libs=$PREFIX/lib --boost-include=$PREFIX/include \
+       --with-jsonnet-libs=gojsonnet
+#+end_example
+Some explanation:
 - The ~./wcb --prefix=$PREFIX~ provides a hint to check the prefix for externals.
-- If ~./wcb install~ is run, it will also install into the prefix.
-- The ~--with-*=no~ is simply to reduce time building support we will not require.
+- The ~--with-*=no~ flags are used to avoid features not required in order reduce build time.
 - Boost can not currently be auto-detected in ~$PREFIX~ so we must be explicit (see [[https://github.com/WireCell/wire-cell-toolkit/issues/334][#334]]).
-- We did not perform ~./wcb install~ see next section for why.
+- We say to use the faster Go Jsonnet library instead of the default C++ ~libjsonnet~.
 
-** Using the development build
+** Build WCT
+:PROPERTIES:
+:CUSTOM_ID: build-wct
+:END:
 
-To install the development version into the view directory, one may simply run:
+After configuring the build, we do the build itself in the usual way:
+#+begin_example
+$ ./wcb
+#+end_example
+With the ~.envrc~ customization from section [[#custom-envrc]] we may now use the results.
+#+begin_example
+$ wire-cell --version
+$ wire-cell --help
+#+end_example
+
+
+** Installing WCT to view
+:PROPERTIES:
+:CUSTOM_ID: install-wct
+:END:
+
+
+With the customization to run ~wire-cell~ "in place" from the ~toolkit/build/~ directory, no installation is required.  Nonetheless, we may install WCT in the usual way:
 #+begin_example
 $ ./wcb install
 #+end_example
-This will allow ~wire-cell~ and libraries to be used based on the ~layout~ directive in the ~.envrc~ file.
-
-However, as the developer enters the edit-build-test loop, the extra time needed to perform ~./wcb install~ is not welcome.  One may avoid the wait by running WCT "in place" using the content of the ~toolkit/build/~ directory.
-This can be done by editing the ~.envrc~ file to add:
-#+begin_example
-PATH_add $PWD/toolkit/build/apps
-path_add LD_LIBRARY_PATH $PWD/toolkit/build/{apps,aux,cuda,gen,hio,iface,img,pgraph,sig,sigproc,sio,tbb,util,root,clus}
-#+end_example
-Edit the ~LD_LIBRARY_PATH~ entries to taste.  Include/exclude any WCT sub packages that are needed/unnecessary.  To setup to using ~bats~ include these lines.
-#+begin_example
-export BATS_LIB_PATH=$PWD/toolkit/test
-PATH_add $PWD/toolkit/test/bats/bin
-#+end_example
-And, to let WCT locate configuration files:
-#+begin_example
-path_add WIRECELL_PATH $PWD/toolkit/cfg
-path_add WIRECELL_PATH $HOME/opt/wire-cell-data
-#+end_example
-Note, when [[https://github.com/WireCell/wire-cell-spack/issues/14][this issue]] is fixed, we may locate ~wire-cell-data~ with a more portable path. 
-
-#+begin_note
-When rerunning ~wcwc view~ the ~.envrc~ file will be moved aside and rewritten.  Take care not to lose any customization.  See [[https://github.com/brettviren/wcwc/issues/5][issue #5]].
-#+end_note
+This will install into the view directory as we configured the builder with ~--prefix=$PREFIX~.
 
 ** Post-hoc exclusion of package files from a view
+:PROPERTIES:
+:CUSTOM_ID: convert-user-to-dev
+:END:
 
 When running the ~wcwc view~ command above, we used ~wire-cell-toolkit~ for the seed and we also excluded it with the ~-e/--exclude~ option.  This results in a view that contains all the dependencies for ~wire-cell-toolkit~ but not the files for ~wire-cell-toolkit~ itself.  It is useful to exclude ~wire-cell-toolkit~ files to avoid any confusion between the versions provided by the Spack package instance and the versions we wish to build from our cloned source.
 
