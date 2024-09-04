@@ -109,3 +109,46 @@ root@wcgpu0:~# modprobe nvidia_uvm
 #+begin_example
 wcwc@wcgpu0:~$ wcwc admin install -S wirecell wire-cell-toolkit+torch+cuda cuda_arch=89
 #+end_example
+
+* Ollama
+
+The packaging for ~ollama~ in Spack was last updated for version 0.1.31 and contains no support for building against CUDA.  Meanwhile the native "installation" method is the dreaded ~curl URL | sh~.  The piped script is not at all suitable for use on WCWC.  So, we shall update the ~ollama~ Spack package.
+
+In doing that we want to immediately exercise it to build packages on WCWC but also to be able to offer a PR to Spack.  This means developing ~ollama/package.py~ in a copy of Spack and temporarily placing a copy into ~wire-cell-spack~.
+
+First, start with my fork which was last touched 7 years ago and find humorous to see:
+#+begin_example
+This branch is 21 commits ahead of, 29446 commits behind spack/spack:develop.
+#+end_example
+None of those 21 commits are useful today.
+
+#+begin_example
+$ ssh wcwc@wcgpu0.phy.bnl.gov
+$ git clone git@github.com:brettviren/spack.git ~/dev/spack-ollama
+$ source ~/dev/spack-ollama/share/spack/setup-env.sh
+$ spack checksum ollama
+==> Error: Could not find any remote versions for ollama
+$ spack edit ollama
+$ spack checksum ollama
+(paste version line into open package.py)
+#+end_example
+Edits:
+- Add ~url~ parameter pointing to recent source archive on GitHub.
+- Add ~version("0.3.9")~ line from ~spack checksum~.
+- Remove build dependencies on ccache, git and gcc (there is now a generated dependency on "cxx").
+- Add minimum version constraints on cmake and go.
+Blithely try an as-is install.
+#+begin_example
+$ spack install ollama
+#+end_example
+Note, this is installing zen3 arch because I forgot to set the ~target~.  Once things are building, I'll redo via wcwc and container.
+
+Next, extend package.py to add support for building against CUDA referring to [[https://github.com/ollama/ollama/blob/main/docs/development.md][this doc]].   
+
+Environment or  variables:
+- ~CUDACXX~ path for ~nvcc~.
+- ~CUDA_LIB_DIR~ location of CUDA shared libraries.
+And, this cmake directive:
+- ~CMAKE_CUDA_ARCHITECTURES~ eg to ~50;60;70;~
+
+Apparently, a lot of build logic is in this mess: [[https://github.com/ollama/ollama/blob/main/llm/generate/gen_linux.sh][gen_linux.sh]].  It is invoked from their ~Dockerfile~.  It seems to be the consumer of ~CUDA_LIB_DIR~ and ~CUDACXX~ so likely must be considered.

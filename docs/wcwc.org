@@ -45,8 +45,6 @@ The following topics are covered in this document:
 
 - Administrative tasks such as initializing WCWC software ecosystem from a green field, installing software packages and other such things are in section [[#admin]].
 
-- Section [[#nabs]] documents how ~wcwc~ works under the hood to automate various tasks.
-
 ** Terms
 :PROPERTIES:
 :CUSTOM_ID: terms
@@ -745,10 +743,8 @@ wirecell:
 #+end_example
 
 
-* Nuts and bolts
-:PROPERTIES:
-:CUSTOM_ID: nabs
-:END:
+* Other documents
 
-Here we describe how various ~wcwc~ commands work including give Spack-level equivalents where they exist.
-
+- [[file:wcwc-howto.org][WCWC howtos]] :: Examples for specific tasks to accomplish with WCWC.
+- [[file:wcwc-bnl.org][BNL WCWC]] :: Information specific to the BNL instance of WCWC.
+- [[file:wcwc-packages.org][Package notes]] :: Notes on specific packages, mostly relevant for admins.
