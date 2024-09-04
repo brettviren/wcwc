@@ -1,5 +1,18 @@
 #+title: WCWC Packages
 
+* meta :noexport:
+
+#+begin_src sh :results output drawer
+scp wcwc-packages.html hierocles.phy.bnl.gov:public_html/wire-cell/docs/
+#+end_src
+
+#+RESULTS:
+:results:
+:end:
+
+
+* Overview
+
 This note collects information about specific packages.
 
 #+begin_example
@@ -109,3 +122,64 @@ root@wcgpu0:~# modprobe nvidia_uvm
 #+begin_example
 wcwc@wcgpu0:~$ wcwc admin install -S wirecell wire-cell-toolkit+torch+cuda cuda_arch=89
 #+end_example
+
+* Ollama
+:PROPERTIES:
+:CUSTOM_ID: ollama
+:END:
+
+
+This is a nightmare package to build.  Instead we add a new ~ollamabin~ Spack packaging in the ~wirecell~ stack.
+To use it you must run a server and a client which we do in different shells.
+
+** Server
+
+The server:
+#+begin_example
+$ wcwc shell -S wirecell -l ollamabin -c "ollama serve"
+#+end_example
+Note, first time, this unpacks some files into ~$TMPDIR~.  Make sure that points to an area with enough free space.
+
+To control exactly which GPU(s) to use we can set ~CUDA_VISIBLE_DEVICES~ to a comma-separated list of GPU indices or IDs.  Here is an example to use a specific GPU via its ID:
+#+begin_example
+u$ nvidia-smi -L  # note the GPU IDs
+u$ wcwc shell -l ollama+cuda
+s$ CUDA_VISIBLE_DEVICES=GPU-7d6529b0-76ce-2e7f-d96e-2018b58d1f2b ollama serve
+#+end_example
+To stop the server, hit ~Ctrl-c~.
+
+** Client
+
+Run a model via the command line client:
+#+begin_example
+$ wcwc shell -l ollama+cuda -c "ollama run llama3.1"
+#+end_example
+This will download several GBs to =~/.ollama/= and then give a chat prompt.  Note, chat is logged by the server.  To exit, hit ~Ctrl-d~.
+
+** Checks
+You can run various checks while client+server is running.  Again, start a subshell
+
+#+begin_example
+$ wcwc shell -S wirecell -l ollamabin -c "ollama ps"
+NAME           	ID          	SIZE  	PROCESSOR	UNTIL                   
+llama3.1:latest	f66fc8dc39ea	6.7 GB	100% GPU 	About a minute from now
+$ nvidia-smi
+...
+|    0   N/A  N/A    520242      C   ...unners/cuda_v12/ollama_llama_server       6142MiB |
+...
+#+end_example
+
+#+begin_note
+~ollama ps~ will *lie* to you about using the GPU when it really isn't.  If ~nvidia-smi~ does not show an entry then the ollama is not actually running the model on the GPU.
+#+end_note
+
+** hhao / OpenBMB-minicpm-llama3
+
+This model requires a hacked ollama for server and client which is provided by the package ~ollamahhao~.  It may be used like:
+
+#+begin_example
+$ wcwc shell -S wirecell -l ollamahhao -c "ollama serve"
+
+$ wcwc shell -S wirecell -l ollamahhao -c "ollama run hhao/openbmb-minicpm-llama3-v-2_5"
+#+end_example
+

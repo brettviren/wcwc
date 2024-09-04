@@ -147,6 +147,9 @@ The explanation of the arguments:
 - ~-i/--ignore-conflicts~ will *skip* including files that are common to multiple packages.  This is required to ignore conflicts due to packages that pollute common paths, eg ~<view>/README~ files.
 - ~-d/--direnv~ defines the top level of a directory tree to be controlled by *direnv*.
 - ~./hio-fix/local~ defines the the *view* directory.
+#+begin_note
+Creating the view can take minute or so.  The worked example here results in over 100k symlinks created across more than 13k directories.
+#+end_note
 
 ** View tree structure
 :PROPERTIES:
@@ -204,8 +207,10 @@ $ rm -rf hio-fix/
 :END:
 We will get the WC-toolkit and WC-python source.  If you are a WC developer with push privileges, you should clone the source via SSH keys using hte ~git@~ URL:
 #+begin_example
+  $ cd hio-fix/
   $ git clone git@github.com:WireCell/wire-cell-python.git  python
   $ git clone git@github.com:WireCell/wire-cell-toolkit.git toolkit
+  $ git clone git@github.com:WireCell/wire-cell-data.git    wcdata
 #+end_example
 Otherwise, you may use the ~https://~ URLs or fork the package(s) to your own GitHub account and use those URLs.
 
@@ -216,21 +221,27 @@ Otherwise, you may use the ~https://~ URLs or fork the package(s) to your own Gi
 
 The ~wcwc view~ initializes ~.envrc~ as a generic starting point.  Here, we will customize it to provide support specifically for WCT development.  To start with 
 #+begin_example
-  # Locate the "wire-cell" and other WCT programs.
-  PATH_add $PWD/toolkit/build/apps
+    # Locate the "wire-cell" and other WCT programs.
+    PATH_add $PWD/toolkit/build/apps
 
-  # Locate the "bats" program and configure its load path.
-  PATH_add $PWD/toolkit/test/bats/bin
-  export BATS_LIB_PATH=$PWD/toolkit/test
+    # Locate the as-built libraries
+    for pkg in apps aux clus gen hio iface img pgraph pytorch root sigproc sig sio tbb util
+    do
+        path_add LD_LIBRARY_PATH $PWD/toolkit/build/$pkg
+    done
 
-  # Locate WCT configuration files.
-  path_add WIRECELL_PATH $PWD/toolkit/cfg
+    # Locate the "bats" program and configure its load path.
+    PATH_add $PWD/toolkit/test/bats/bin
+    export BATS_LIB_PATH=$PWD/toolkit/test
+
+    # Locate WCT configuration files.
+    path_add WIRECELL_PATH $PWD/toolkit/cfg
 #+end_example
 The above is generic to any view-based WCT dev setup.  You may simply copy-paste it into your own ~.envrc~.
 
-Finally, we locate the ~wire-cell-data~ contents which is user specific:
+Finally, we locate the ~wire-cell-data~ contents.  This is often user-specific but with the clone performed above you may include this with::
 #+begin_example
-  path_add WIRECELL_PATH $HOME/opt/wire-cell-data
+  path_add WIRECELL_PATH $PWD/wcdata
 #+end_example
 In the future, WC "data" configuration files will be provided as a Spack package (see [[https://github.com/WireCell/wire-cell-spack/issues/14][wire-cell-spack/issues/14]]).
 
