@@ -813,8 +813,15 @@ def maybe_reexec(prefix, image, image_prefix):
     - looks true, use default prefix
     - if "same" or "internal" use the same as outside the container
     - else use what it names
+
+    If a command is in the admin group, image can not be None.
+
     '''
-    iamge = boolish(image, wcwc_image, None)
+    if 'admin' in sys.argv and image is None:
+        debug(f'admin commands require image but none given, assuming default "{wcwc_image}"')
+        image = wcwc_image
+
+    image = boolish(image, wcwc_image, None)
     if image is None:
         return
     if Path("/run/.containerenv").exists() or 'container' in os.environ:
@@ -823,11 +830,14 @@ def maybe_reexec(prefix, image, image_prefix):
         
     image_prefix = boolish(image_prefix, wcwc_prefix, None, same=prefix, internal=prefix)
 
+    debug(f'{image=} {image_prefix=}')
+
     assure_podman_image(image)
 
     argv = list(sys.argv)
-    to_strip="-p --prefix -I --image -P --image-prefix"
+    to_strip="-p --prefix -I --image -P --image-prefix".split()
     doomed = list()
+    debug(f'before: {argv=}')
     for ind, arg in enumerate(argv):
         for one in to_strip:
             if arg == one:
@@ -841,6 +851,7 @@ def maybe_reexec(prefix, image, image_prefix):
     for ind in doomed:
         argv.pop(ind)
     argv.pop(0)                 # remove "wcwc"
+    debug(f'after: {argv=}')
 
     pmargs = ["podman","run"]
     if prefix and image_prefix:
