@@ -12,19 +12,23 @@
           - autofs
           - build-essential
           - ca-certificates
+          - ccache
           - coreutils
           - curl
           - direnv
+          - distcc
           - environment-modules
           - fish
           - freeipa-client
           - gfortran
           - git
+          - golang-go
           - gpg
           - keychain
           - lsb-release
           - nfs-kernel-server
           - podman
+          - plocate
           - python-is-python3
           - python3
           - python3-distutils
@@ -34,6 +38,7 @@
           - rsync
           - screen
           - tcsh
+          - tree
           - tmux
           - unzip
           - vim
