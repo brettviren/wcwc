@@ -1,5 +1,18 @@
 #+title: WCWC Packages
 
+* meta :noexport:
+
+#+begin_src sh :results output drawer
+scp wcwc-packages.html hierocles.phy.bnl.gov:public_html/wire-cell/docs/
+#+end_src
+
+#+RESULTS:
+:results:
+:end:
+
+
+* Overview
+
 This note collects information about specific packages.
 
 #+begin_example
@@ -111,44 +124,62 @@ wcwc@wcgpu0:~$ wcwc admin install -S wirecell wire-cell-toolkit+torch+cuda cuda_
 #+end_example
 
 * Ollama
+:PROPERTIES:
+:CUSTOM_ID: ollama
+:END:
 
-The packaging for ~ollama~ in Spack was last updated for version 0.1.31 and contains no support for building against CUDA.  Meanwhile the native "installation" method is the dreaded ~curl URL | sh~.  The piped script is not at all suitable for use on WCWC.  So, we shall update the ~ollama~ Spack package.
 
-In doing that we want to immediately exercise it to build packages on WCWC but also to be able to offer a PR to Spack.  This means developing ~ollama/package.py~ in a copy of Spack and temporarily placing a copy into ~wire-cell-spack~.
+This is a nightmare package to build.  Instead we add a new ~ollamabin~ Spack packaging in the ~wirecell~ stack.
+To use it you must run a server and a client which we do in different shells.
 
-First, start with my fork which was last touched 7 years ago and find humorous to see:
+** Server
+
+The server:
 #+begin_example
-This branch is 21 commits ahead of, 29446 commits behind spack/spack:develop.
+$ wcwc shell -S wirecell -l ollamabin -c "ollama serve"
 #+end_example
-None of those 21 commits are useful today.
+Note, first time, this unpacks some files into ~$TMPDIR~.  Make sure that points to an area with enough free space.
+
+To control exactly which GPU(s) to use we can set ~CUDA_VISIBLE_DEVICES~ to a comma-separated list of GPU indices or IDs.  Here is an example to use a specific GPU via its ID:
+#+begin_example
+u$ nvidia-smi -L  # note the GPU IDs
+u$ wcwc shell -l ollama+cuda
+s$ CUDA_VISIBLE_DEVICES=GPU-7d6529b0-76ce-2e7f-d96e-2018b58d1f2b ollama serve
+#+end_example
+To stop the server, hit ~Ctrl-c~.
+
+** Client
+
+Run a model via the command line client:
+#+begin_example
+$ wcwc shell -l ollama+cuda -c "ollama run llama3.1"
+#+end_example
+This will download several GBs to =~/.ollama/= and then give a chat prompt.  Note, chat is logged by the server.  To exit, hit ~Ctrl-d~.
+
+** Checks
+You can run various checks while client+server is running.  Again, start a subshell
 
 #+begin_example
-$ ssh wcwc@wcgpu0.phy.bnl.gov
-$ git clone git@github.com:brettviren/spack.git ~/dev/spack-ollama
-$ source ~/dev/spack-ollama/share/spack/setup-env.sh
-$ spack checksum ollama
-==> Error: Could not find any remote versions for ollama
-$ spack edit ollama
-$ spack checksum ollama
-(paste version line into open package.py)
+$ wcwc shell -S wirecell -l ollamabin -c "ollama ps"
+NAME           	ID          	SIZE  	PROCESSOR	UNTIL                   
+llama3.1:latest	f66fc8dc39ea	6.7 GB	100% GPU 	About a minute from now
+$ nvidia-smi
+...
+|    0   N/A  N/A    520242      C   ...unners/cuda_v12/ollama_llama_server       6142MiB |
+...
 #+end_example
-Edits:
-- Add ~url~ parameter pointing to recent source archive on GitHub.
-- Add ~version("0.3.9")~ line from ~spack checksum~.
-- Remove build dependencies on ccache, git and gcc (there is now a generated dependency on "cxx").
-- Add minimum version constraints on cmake and go.
-Blithely try an as-is install.
+
+#+begin_note
+~ollama ps~ will *lie* to you about using the GPU when it really isn't.  If ~nvidia-smi~ does not show an entry then the ollama is not actually running the model on the GPU.
+#+end_note
+
+** hhao / OpenBMB-minicpm-llama3
+
+This model requires a hacked ollama for server and client which is provided by the package ~ollamahhao~.  It may be used like:
+
 #+begin_example
-$ spack install ollama
+$ wcwc shell -S wirecell -l ollamahhao -c "ollama serve"
+
+$ wcwc shell -S wirecell -l ollamahhao -c "ollama run hhao/openbmb-minicpm-llama3-v-2_5"
 #+end_example
-Note, this is installing zen3 arch because I forgot to set the ~target~.  Once things are building, I'll redo via wcwc and container.
 
-Next, extend package.py to add support for building against CUDA referring to [[https://github.com/ollama/ollama/blob/main/docs/development.md][this doc]].   
-
-Environment or  variables:
-- ~CUDACXX~ path for ~nvcc~.
-- ~CUDA_LIB_DIR~ location of CUDA shared libraries.
-And, this cmake directive:
-- ~CMAKE_CUDA_ARCHITECTURES~ eg to ~50;60;70;~
-
-Apparently, a lot of build logic is in this mess: [[https://github.com/ollama/ollama/blob/main/llm/generate/gen_linux.sh][gen_linux.sh]].  It is invoked from their ~Dockerfile~.  It seems to be the consumer of ~CUDA_LIB_DIR~ and ~CUDACXX~ so likely must be considered.
