@@ -582,26 +582,6 @@ The basic "user" commands are relevant for admin tasks and in addition some task
 $ wcwc admin
 #+end_example
 
-#+begin_src sh :exports results :results output :wrap example
-wcwc admin
-#+end_src
-
-#+RESULTS:
-#+begin_example
-Usage: wcwc admin [OPTIONS] COMMAND [ARGS]...
-
-  Commands intended for an WCWC administrator.
-
-Options:
-  -h, --help  Show this message and exit.
-
-Commands:
-  check-os  Check if current running OS is supported
-  defaults  Emit a default config file.
-  init      Initialize support for the named stack.
-  install   Install a package in the context of a stack.
-  oses      Print names of supported operating systems, one per line.
-#+end_example
 
 ** Use of podman images
 :PROPERTIES:
@@ -740,6 +720,22 @@ base:
 wirecell:
 ==> 1 environments
     wct-master-gcc
+#+end_example
+
+
+** Updating packaging
+
+Existing or new ~package.py~ may be edited in-place.  Some git gymnasitics may be warranted:
+
+#+begin_example
+$ cd /wcwc/stacks/wirecell/repo
+$ emacs newpackage/package.py oldpackage/package.py
+
+$ git config user.name "My Name"
+$ git config user.email "myname@example.com"
+
+$ git commit -am "Added new, fixed old"
+$ git push --set-upstream origin wcwc-master:master
 #+end_example
 
 

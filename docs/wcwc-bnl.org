@@ -723,3 +723,44 @@ And
   # systemctl restart gdm3
   # systemctl restart gdm
 #+end_example
+
+** Installing and developing packages
+
+Spack state modifications are performed on a read-write *copy* of ~/wcwc~.  To make the copy:
+#+begin_example
+$ rsync wcwc@lycastus.phy.bnl.gov:/wcwc/ ~/wcwc-dev/
+#+end_example
+To return changes:
+#+begin_example
+$ cat ~/bin/wcwc-sync 
+rsync -av \
+  --exclude "*~" --exclude __pycache__ --exclude stage --exclude cache ~/wcwc-dev/ \
+  wcwc@lycastus.phy.bnl.gov:/wcwc/
+#+end_example
+
+While it is possible to directly edit files under =~/wcwc-dev/= any installation and use of packages must be done inside a container:
+#+begin_example
+u$ wcwc --image=yes --prefix=$HOME/wcwc-dev shell
+s$ ls /wcwc
+opt  spack  stacks  stage  wcwc.db  wcwc.yaml
+s$ spack install [...]
+#+end_example
+Or, better use ~wcwc admin~ (which enforces the container):
+#+begin_example
+$ wcwc --prefix=$HOME/wcwc-dev admin install [...]
+#+end_example
+The container must also be used to exercise a locally installed package:
+#+begin_example
+$ wcwc --image=yes --prefix=$HOME/wcwc-dev admin shell -l <package>
+# or
+$ wcwc --image=yes --prefix=$HOME/wcwc-dev admin shell -S wirecell -l <package-in-wirecell>
+#+end_example
+
+When state changes applied to =~/wcwc-dev/= are complete, "commit" them by rsync'ing back:
+#+begin_example
+$ ./bin/wcwc-sync
+#+end_example
+
+#+begin_note
+In the future, the sync parts of this workflow may become incorporated into ~wcwc~.
+#+end_note
