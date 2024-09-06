@@ -10,7 +10,7 @@ This document collects various recipes to perform some specific tasks.  It assum
 #+end_src
 
 #+begin_src sh :results output drawer
-scp wcwc-howto.html wcwc-howto.pdf hierocles.phy.bnl.gov:public_html/wire-cell/docs/
+scp wcwc-howto.html hierocles.phy.bnl.gov:public_html/wire-cell/docs/
 #+end_src
 
 #+RESULTS:
@@ -99,11 +99,7 @@ This section will walk through creating a View based on an instance of ~wire-cel
 :CUSTOM_ID: configure-direnv
 :END:
 
-Follow the simple, one-time instructions here:
-
-https://direnv.net/docs/hook.html
-
-Hooking ~direnv~ into your shell is not required for simply making the view (section [[#create-view]]) but will be needed to use the view (starting with section [[#use-view]]).
+On BNL WCWC this step is performed by the system for the user.  For other users or for more information about use of ~direnv~ in WCWC see [[file:wcwc-packages.org::#direnv]].
 
 ** Determine specs to seed the view
 :PROPERTIES:
@@ -324,6 +320,7 @@ $ rm -rf hio-fix/local/bin/{wire-cell,wc*} \
          hio-fix/local/lib/libWireCell* \
          hio-fix/local/include/WireCell* 
 #+end_example
+
 
 * Add existing package to a Spack Environment
 

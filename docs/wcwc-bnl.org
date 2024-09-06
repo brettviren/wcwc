@@ -8,7 +8,7 @@
 #+end_src
 
 #+begin_src sh :results output drawer
-scp wcwc-bnl.html wcwc-bnl.pdf hierocles.phy.bnl.gov:public_html/wire-cell/docs/
+scp wcwc-bnl.html hierocles.phy.bnl.gov:public_html/wire-cell/docs/
 #+end_src
 
 #+RESULTS:
@@ -43,6 +43,10 @@ Enrollment of a workstation into the BNL WCWC is initiated by its BNL custodian 
 - A supported OS is installed (see section [[#os]])
 - The OS is configured to use a static IP address that has been allocated from BNL ITD.
 - A copy of the [[https://www.phy.bnl.gov/~bviren/wire-cell/docs/wcwc.pub][BNL WCWC admin SSH public]] keys is placed in ~/root/.ssh/authorized_keys~.
+#+begin_note
+These requirements are for *member workstations*.  WCWC users need not enroll a workstation in order to use the WCWC.  The only requirement for non-member computers is to provide the user an SSH client.
+#+end_note
+
 
 ** User enrollment
 :PROPERTIES:
@@ -111,7 +115,7 @@ As one example, place the following text at the top of =~/.ssh/config= file and 
 Host *.phy
 	User WCWCUSER
 	ProxyJump WCWCUSER@ssh.phy.bnl.gov
-        Hostname %h.bnl.gov
+    Hostname %h.bnl.gov
 	ControlMaster auto
 	ControlPath ~/.ssh/%r@%h:%p
 	ControlPersist 10m
@@ -723,3 +727,44 @@ And
   # systemctl restart gdm3
   # systemctl restart gdm
 #+end_example
+
+** Installing and developing packages
+
+Spack state modifications are performed on a read-write *copy* of ~/wcwc~.  To make the copy:
+#+begin_example
+$ rsync wcwc@lycastus.phy.bnl.gov:/wcwc/ ~/wcwc-dev/
+#+end_example
+To return changes:
+#+begin_example
+$ cat ~/bin/wcwc-sync 
+rsync -av \
+  --exclude "*~" --exclude __pycache__ --exclude stage --exclude cache ~/wcwc-dev/ \
+  wcwc@lycastus.phy.bnl.gov:/wcwc/
+#+end_example
+
+While it is possible to directly edit files under =~/wcwc-dev/= any installation and use of packages must be done inside a container:
+#+begin_example
+u$ wcwc --image=yes --prefix=$HOME/wcwc-dev shell
+s$ ls /wcwc
+opt  spack  stacks  stage  wcwc.db  wcwc.yaml
+s$ spack install [...]
+#+end_example
+Or, better use ~wcwc admin~ (which enforces the container):
+#+begin_example
+$ wcwc --prefix=$HOME/wcwc-dev admin install [...]
+#+end_example
+The container must also be used to exercise a locally installed package:
+#+begin_example
+$ wcwc --image=yes --prefix=$HOME/wcwc-dev admin shell -l <package>
+# or
+$ wcwc --image=yes --prefix=$HOME/wcwc-dev admin shell -S wirecell -l <package-in-wirecell>
+#+end_example
+
+When state changes applied to =~/wcwc-dev/= are complete, "commit" them by rsync'ing back:
+#+begin_example
+$ ./bin/wcwc-sync
+#+end_example
+
+#+begin_note
+In the future, the sync parts of this workflow may become incorporated into ~wcwc~.
+#+end_note
