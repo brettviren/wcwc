@@ -8,6 +8,7 @@
     # this list is not minimal and combines needs of basic wcwc and the BNL WCWC clustering policy
     - name: Install WCWC workstation client packages
       ansible.builtin.apt:
+        update_cache: true
         pkg:
           - autofs
           - build-essential
@@ -24,6 +25,8 @@
           - git
           - golang-go
           - gpg
+          - ipython3
+          - jupyter
           - keychain
           - lsb-release
           - nfs-kernel-server
@@ -31,9 +34,16 @@
           - plocate
           - python-is-python3
           - python3
-          - python3-distutils
-          - python3-venv
           - python3-click
+          - python3-distutils
+          - python3-matplotlib
+          - python3-numpy
+          - python3-pandas
+          - python3-torch
+          - python3-torchaudio
+          - python3-torchtext
+          - python3-torchvision
+          - python3-venv
           - python3-yaml
           - rsync
           - screen
@@ -57,3 +67,20 @@
         dest: /usr/local/bin/wcwc
         owner: root
         mode: '755'      
+    - name: Hook direnv to shell
+      ansible.builtin.lineinfile:
+        path: /etc/profile.d/direnv.sh
+        line: 'eval "$(direnv hook bash)"'
+        create: true
+    - name: Hook direnv to fish
+      ansible.builtin.lineinfile:
+        path: /etc/fish/conf.d/direnv.fish
+        line: 'direnv hook fish | source'
+        create: true
+    - name: Hook direnv to tcsh
+      ansible.builtin.lineinfile:
+        path: /etc/csh/cshrc.d/direnv
+        line: "eval `direnv hook tcsh`"
+        create: true
+
+        

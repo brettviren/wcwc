@@ -1,7 +1,6 @@
 # general user workstations that go all-in with features
 workstations:
   hosts:
-    lycastus.phy.bnl.gov:
     hierocles.phy.bnl.gov:
     heracles.phy.bnl.gov:
     aswork.phy.bnl.gov:
