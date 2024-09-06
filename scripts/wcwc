@@ -890,6 +890,10 @@ cmddef = dict(context_settings = dict(auto_envvar_prefix='WCWC',
 def cli(ctx, config, prefix, image_prefix, image, log_output, log_level):
     '''
     Operate on the WCWC software ecosystem.
+
+    Documentation:
+    
+    https://www.phy.bnl.gov/~bviren/wire-cell/docs/wcwc-index.html
     '''
     setup_logging(log_output, log_level)
     debug(f'{prefix=} {image=} {image_prefix=}')

@@ -8,7 +8,7 @@
 #+end_src
 
 #+begin_src sh :results output drawer
-scp wcwc-bnl.html wcwc-bnl.pdf hierocles.phy.bnl.gov:public_html/wire-cell/docs/
+scp wcwc-bnl.html hierocles.phy.bnl.gov:public_html/wire-cell/docs/
 #+end_src
 
 #+RESULTS:
@@ -43,6 +43,10 @@ Enrollment of a workstation into the BNL WCWC is initiated by its BNL custodian 
 - A supported OS is installed (see section [[#os]])
 - The OS is configured to use a static IP address that has been allocated from BNL ITD.
 - A copy of the [[https://www.phy.bnl.gov/~bviren/wire-cell/docs/wcwc.pub][BNL WCWC admin SSH public]] keys is placed in ~/root/.ssh/authorized_keys~.
+#+begin_note
+These requirements are for *member workstations*.  WCWC users need not enroll a workstation in order to use the WCWC.  The only requirement for non-member computers is to provide the user an SSH client.
+#+end_note
+
 
 ** User enrollment
 :PROPERTIES:
@@ -111,7 +115,7 @@ As one example, place the following text at the top of =~/.ssh/config= file and 
 Host *.phy
 	User WCWCUSER
 	ProxyJump WCWCUSER@ssh.phy.bnl.gov
-        Hostname %h.bnl.gov
+    Hostname %h.bnl.gov
 	ControlMaster auto
 	ControlPath ~/.ssh/%r@%h:%p
 	ControlPersist 10m
