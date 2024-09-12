@@ -28,6 +28,7 @@
           - ipython3
           - jupyter
           - keychain
+          - kitty
           - lsb-release
           - nfs-kernel-server
           - podman
@@ -52,6 +53,7 @@
           - tmux
           - unzip
           - vim
+          - xpra
           - zip
 
     - name: Provide auto_home.sh
