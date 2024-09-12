@@ -182,7 +182,14 @@ For developing WCT against Spack packages see: [[file:wcwc-howto.org::#spack-vie
 :END:
 
 
-The main motivation for WCWC is to share workstation GPUs at BNL.   All are currently nVidia and so CUDA support is a must.  nVidia phases out support for old hardware in new software (kernel driver and libraries).  That landscape is complex and described by several things:
+The main motivation for WCWC is to share workstation GPUs at BNL.   Their GPUS are all currently from nVidia and so CUDA support is a must.
+
+** Versions
+:PROPERTIES:
+:CUSTOM_ID: cuda-versioning
+:END:
+
+The nVidia hardware and CUDA software landscape is a little complex and described by several versions:
 
 - compute capability :: (cc) a number like 9.0 which maps to a set of supported compute features
 - hardware family :: eg "turing" is a name that implies one or more cc numbers ([[https://developer.nvidia.com/cuda-gpus][table of device cc]],  [[https://docs.nvidia.com/cuda/cuda-compiler-driver-nvcc/index.html#gpu-feature-list][table of family cc]])
@@ -225,8 +232,18 @@ wcwc@haiku:~$ nvidia-smi  -L
 GPU 0: NVIDIA GeForce GTX 750 Ti (UUID: GPU-b87cc150-ba6d-329e-02e4-7f8ddef6a581)
 #+end_example
 
-Spack can compile CUDA from scratch or or use the [[https://spack.readthedocs.io/en/latest/gpu_configuration.html#using-an-external-cuda-installation][system CUDA as an "external" package]] in a custom ~packages.hyaml~ configuration file.  Current Spack ~develop~ branch provides CUDA 11.8.0 and WCWC uses that.
-The Spack build of CUDA is relatively quick.
+** CUDA and Spack
+:PROPERTIES:
+:CUSTOM_ID: cuda-spack
+:END:
+
+
+Spack can compile CUDA from scratch with some caveats:
+- The Spack ~cuda~ package will only build a ~stubs/libcuda.so~ and not a "real" ~libcuda.so~.  The stub holds "dummy" implementations of the CUDA API and may be used to satisfy link-time dependencies when building in an environment that lacks a "real" ~libcuda.so~.  On WCWC we will rely on Debian's ~libcuda.so~.
+- Some Spack packages care about the CUDA "cc" number.  Eg, they may have internal code switches that depend on the version.  Of those that care, some (like ~kokkos~) can be built with support for exactly one "cc".  The conventional way to communicate the "cc" to these packages is via ~cuda_arch~ variant parameter.
+
+
+
 
 * Torch
 :PROPERTIES:
@@ -288,19 +305,30 @@ The official [[https://github.com/ollama/ollama/][ollama/ollama]] supports a num
 
 WCWC provides official and variant ~ollama~ as different Spack packages.  Currently:
 
-- ollamabin :: The official version.  The "bin" implies the package consists of a [[https://github.com/ollama/ollama/releases][binary release]] and to avoid conflict with the Spack ~ollama~ package that builds from source (and which is out of date and does build against CUDA, but see [[https://github.com/spack/spack/pull/46204][spack#46204]])
+- ollama :: From Spack ~builtins~ repo with CUDA support (~spack install ollama+cuda~, added in [[https://github.com/spack/spack/pull/46204][PR]]).
+- ollamabin :: The official version.  The "bin" implies the package consists of a [[https://github.com/ollama/ollama/releases][binary release]] and to avoid conflict with the Spack ~ollama~ package.
 - ollamalux :: A "hacked" version to run specifically ~aiden_lu/minicpm-v2.6~.  The "lux" portion of the name refers to it originating from [[https://github.com/luixiao0/ollama/releases][luixiao0/ollama binary release]].
 
+Regardless of the package name, the user uses the program named ~ollama~.
 
+** Server
+:PROPERTIES:
+:CUSTOM_ID: ollama-server
+:END:
 
-Regardless of the package, the user uses the program named ~ollama~.
+The ~ollama~ server is started simply:
+#+begin_example
+$ ollama serve
+#+end_example
+To stop the server, simply hit ~Ctrl-c~.
+
 
 ** Environment
 :PROPERTIES:
 :CUSTOM_ID: ollama-env
 :END:
 
-To help keep the multiple ~ollama~ variants distinct, the WCWC packages set a number of environment variables. 
+To help keep the multiple ~ollama~ variants distinct, the WCWC ~ollamaXXX~ packages will set some environment variables (the ~ollama~ package from Spack, proper sets none) when a user "loads" the package (eg ~wcwc shell -l ollamaXXX~).
 
 - ~OLLAMA_HOST~ :: server IP address and port number.
 - ~OLLAMA_TMPDIR~ :: set to ~$HOME/tmp~ to avoid filling ~/tmp~
@@ -325,24 +353,36 @@ s$ ollama [...]
 Replace ~ollamaXXX~ with one of the package names in the list above.
 
 
-
-
-** Server
+** Use GPUs
 :PROPERTIES:
-:CUSTOM_ID: ollama-server
+:CUSTOM_ID: ollama-gpu
 :END:
 
-The ~ollama~ server is started simply:
+By default, ~ollama serve~ should auto detect GPU(s) as long as it finds the "real" ~libcuda.so~ provided by Debian.  See section [[#cuda-spack]].  If this seems to fail, running with the "debug" message level can help understand the cause:
 #+begin_example
-$ ollama serve
+$ OLLAMA_DEBUG=true ollama serve
 #+end_example
-To stop the server, simply hit ~Ctrl-c~.
+Note, these warnings:
+#+begin_example
+unable to locate gpu dependency libraries
+#+end_example
+are red-herrings and will be printed even when the GPU are found and usable.
 
-By default, ~ollama~ will locate GPU(s) and use them as it sees suited.  To control which GPU(s) it should use:
+
+By default ~ollama serve~ will use the GPUs it finds.  To control which GPUs ~ollama~ may use you may set the ~CUDA_VISIBLE_DEVICES~ environment variable to a comma-separated list of GPU indices or IDs.  Enumeration of GPU indices may not be stable so use IDs to list specific GPUs if stability is required.  Some examples:
 #+begin_example
-$ nvidia-smi -L  # note the GPU IDs
-$ CUDA_VISIBLE_DEVICES=GPU-7d6529b0-76ce-2e7f-d96e-2018b58d1f2b ollama serve
+  # use "first" device
+  $ CUDA_VISIBLE_DEVICES=0 ollama serve
+
+  # use "first" and "second" device
+  $ CUDA_VISIBLE_DEVICES=0,1 ollama serve
+
+  # use specific device(s)
+  $ nvidia-smi -L  # note the GPU IDs
+  $ CUDA_VISIBLE_DEVICES=GPU-7d6529b0-76ce-2e7f-d96e-2018b58d1f2b ollama serve
 #+end_example
+
+
 
 
 ** Client
@@ -356,7 +396,7 @@ $ ollama run llama3.1
 #+end_example
 Chat is logged by the server.  To exit, hit ~Ctrl-d~.
 
-The first time a model is run its files will be downloaded by the server.  Before starting the server, the location can be controlled by ~OLLAMA_MODELS~ which WCWC ~ollamaXXX~ package sets to ~$HOME/.cache/ollama/models/XXX/~.
+The first time a model is run its files will be downloaded by the server.
 
 
 ** Checks
