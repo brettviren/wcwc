@@ -430,7 +430,7 @@ The WCWC admin runs:
 
 
 
-** Provide /wcwc
+** Provide ~/wcwc~
 
 A few methods are supported to provide the ~/wcwc~ directory that contains all the software packages built by Spack.  The "sync" method is recomended if a workstation has sufficient disk space for ~/wcwc~ to be a mirror.  Otherwise, the workstation owner should choose ~autofs~ for robustness against loss of server or ~fstab~ for less robustness but to avoid automount delays.  Details on these pros and cons and other issues for each choice are in the following sections.
 

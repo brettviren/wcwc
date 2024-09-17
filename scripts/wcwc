@@ -907,7 +907,7 @@ def cli(ctx, config, prefix, image_prefix, image, log_output, log_level):
 ### USER COMMANDS
 # User commands are directly in the main group.  
 
-def use_stacks(with_spack=True, required=False):
+def use_stacks(with_spack=True, required=False, use_stacks=None):
     '''The command uses one or more stacks'''
     def decorator(func):
         @click.option("-S", "--stacks", default=None, type=str,
@@ -917,13 +917,15 @@ def use_stacks(with_spack=True, required=False):
         def wrapper(ctx, stacks, *args, **kwds):
             #debug(f'use_stacks: {stacks=} {args=} {kwds=}')
             if stacks is None:
-                stacks = ()
+                stacks = []
             elif stacks in ("all","known"):
                 stacks = list(ctx.obj.stacks.values())
                 debug(f'use_stacks: {[s.name for s in stacks]}')
             else:
                 stacks = [ctx.obj.stacks[s] for s in stacks.split(",")]
                 debug(f'use_stacks: {[s.name for s in stacks]}')
+            if use_stacks:
+                stacks = list(set(stacks + [ctx.obj.stacks[s] for s in use_stacks.split(",")]))
 
             if required:
                 for stack in stacks:
@@ -1334,22 +1336,9 @@ def cmd_version():
     print(wcwc_version)
 
 
-
-@cli.command("view")
-@use_stacks()
-@click.option("-e","--exclude", default=[], multiple=True,
-              help="Exclude the named package from the view.")
-@click.option("-d","--direnv", default=None,
-              help="Initialize a direnv .envrc in the given directory")
-@click.option("-s","--seed", default=[], multiple=True,
-              help="Supply a seed spec.")
-@click.option("-f","--force", is_flag=True, default=False,
-              help="Force (re)making the view")
-@click.argument("view")
-@click.pass_context
-def cmd_view(ctx, stacks, spack_exe, exclude, direnv, seed, force, view):
+def do_view(stacks, spack_exe, exclude, direnv, seed, force, view):
     '''
-    Create a view directory given one or more seed specs.
+    Guts of command "wcwc view".
     '''
 
     view = Path(view)
@@ -1396,6 +1385,25 @@ path_add PKG_CONFIG_PATH "$PREFIX/lib64/pkgconfig"
         shutil.move(str(envrc), str(envrc)+"~")
     envrc.write_text(envrc_text)
     info(f'To use the view:\ncd {direnv} && direnv allow')
+
+@cli.command("view")
+@use_stacks()
+@click.option("-e","--exclude", default=[], multiple=True,
+              help="Exclude the named package from the view.")
+@click.option("-d","--direnv", default=None,
+              help="Initialize a direnv .envrc in the given directory")
+@click.option("-s","--seed", default=[], multiple=True,
+              help="Supply a seed spec.")
+@click.option("-f","--force", is_flag=True, default=False,
+              help="Force (re)making the view")
+@click.argument("view")
+@click.pass_context
+def cmd_view(ctx, stacks, spack_exe, exclude, direnv, seed, force, view):
+    '''
+    Create a view directory given one or more seed specs.
+    '''
+
+    do_view(stacks, spack_exe, exclude, direnv, seed, force, view)
 
 # disable auto-help so we pass on "-h/--help" to spack.
 @cli.command("spack", context_settings={ "ignore_unknown_options":True,
@@ -1559,6 +1567,101 @@ ENTRYPOINT ["wcwc"]
     context = Path(__file__).parent.absolute()
     podman(f'build -t {name} -f - {context}', capture_output=False, input=containerfile)
 
+
+
+#### tasks
+
+@cli.group()
+@click.pass_context
+def task(ctx):
+    '''
+    Commands for specific tasks.
+    '''
+    debug(f'task group {sys.argv=}, {ctx.info_name=} {ctx.command.name=}')
+
+
+@task.command("wct-dev-view")
+@use_stacks(required=True, use_stacks='wirecell')
+@click.option("-u", "--url", default="git@github.com:WireCell/wire-cell-toolkit.git",
+              help="Provide a git url, default is the SSH url on GitHub")
+@click.option("-r", "--ref", default="master",
+              help='What branch or tag to start development, default="master"')
+@click.option("-s","--seed", default=[], multiple=True,
+              help="Supply seed specs.")
+@click.argument("path", nargs=-1)
+def wct_dev_view(stacks, spack_exe, url, ref, seed, path):
+    '''
+    Create a view based development area for Wire-Cell Toolkit development
+
+    This is effectively "wcwc view" with chosen options and additional configuration.
+    '''
+    if not path:
+        path="."
+    else:
+        path=path[0]
+    path = Path(path).absolute()
+    path.mkdir(parents=True, exist_ok=True)
+
+    view = path / "local"
+    if view.exists():
+        warn(f'using existing view: {view}')
+    else:
+        if not seed:
+            got = spack_exe('find --json wire-cell-toolkit', capture_output=True, check=False)
+            for one in json.loads(got.stdout):
+                seed = one['name'] + '/' + one['hash']
+                debug(f'considering for seed: {seed}')
+            info(f'seeding with: {seed}')
+            seed = [seed]
+        do_view(stacks, spack_exe, exclude=['wire-cell-toolkit'], direnv=path, seed=seed, force=False, view=view)
+
+    git = which("git", cwd=path)
+    pydir = path / 'python'
+    if pydir.exists():
+        warn(f'using existing wire-cell-python: {pydir}')
+    else:
+        pyurl = url.replace('-toolkit','-python')
+        git(f'clone {pyurl} {pydir}')
+    tkdir = path / 'toolkit'
+    if tkdir.exists():
+        warn(f'using existing wire-cell-toolkit: {tkdir}')
+    else:
+        git(f'clone --branch {ref} --single-branch {url} {tkdir}')
+
+    envrc = path / ".envrc"
+    if 'Added by wcwc task wct-dev-view' in envrc.read_text():
+        warn(f'already patched up {envrc}')
+    else:
+        with envrc.open("a") as fp:
+            fp.write('''
+### Added by wcwc task wct-dev-view 
+# cfg from source and data from view
+path_add WIRECELL_PATH $PWD/toolkit/cfg
+path_add WIRECELL_PATH $PWD/local/share/wirecell
+
+# find wct-bats.sh library in source 
+export BATS_LIB_PATH=$PWD/toolkit/test
+
+# Find built bin, avoids needing to run "./wcb install".
+PATH_add $PWD/toolkit/test/bats/bin
+PATH_add $PWD/toolkit/build/apps
+# Find built libs to avoid install.  Note, edit this list to taste.
+path_add LD_LIBRARY_PATH $PWD/toolkit/build/{apps,aux,gen,iface,hio,img,pgraph,sig,sigproc,sio,tbb,util}        
+
+# Find python modules
+export PYTHONPATH=$PWD/python
+### 
+''')
+    info(f'\nExamine and modify {envrc} and then run:\n')
+    info(f'cd {path}\ndirenv allow\n')
+
+    info(f'cd {path}/python\npip install -e .\n')
+    info(f'cd {path}/toolkit')
+    info('./wcb configure --prefix=$PREFIX --boost-mt --boost-libs=$PREFIX/lib --boost-include=$PREFIX/include --with-jsonnet-libs=gojsonnet')
+    info('./wcb')
+    info('\nThe configure command is only a minimal example.  See ./wcb --help for more.')
+
+    
 
 def main():
     cli()
