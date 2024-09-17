@@ -218,6 +218,83 @@ While the user is suggested to try this advanced configuration if they wish to h
 The ~Match~ keyword requires OpenSSH ca. version 6.5 and the "new style" ~ip~ command to work on the local computer.
 #+end_note
 
+** Remote X11 access
+:PROPERTIES:
+:CUSTOM_ID: remote-x11
+:END:
+
+
+It can be useful to run an X11 client on the remote workstation to display on your local X11 server.  There are various ways to do this with different trade-offs.
+
+*** Forward X11 through SSH
+:PROPERTIES:
+:CUSTOM_ID: ssh-x11
+:END:
+
+
+This is perhaps the simplest but is not very performant.  Be sure to include ~ForwardX11 yes~ in =~/.ssh/config= or use ~-X~ on the command line (or ~-Y~ to also forward "insecure" X11 which may be required for ROOT.
+
+#+begin_example
+l$ echo $DISPLAY
+:0
+
+l$ ssh bviren@hierocles.phy.bnl.gov
+r$ echo $DISPLAY
+localhost:12.0
+
+r$ wcwc shell -l root/kl5ziao
+s$ root
+root [0] TBrowser b
+#+end_example
+Takes a few seconds and interacting with the GUI is rather slow but possible.
+
+*** Xpra
+:PROPERTIES:
+:CUSTOM_ID: xpra
+:END:
+
+
+The ~xpra~ command is installed on WC workstations.  It provides a much faster protocol than standard X11, even when tunneled over SSH.  It is cross platform so you can run the client on Linux as well as those others (Mac or Windows).
+
+#+begin_example
+l$ xpra start --ssh=ssh ssh://hierocles.phy.bnl.gov/ --start=xterm
+...
+Actual display used: :5
+#+end_example
+Note the display number printed here.
+
+This will open an "xterm" (or whatever was given to ~--start~).  
+#+begin_example
+r$ echo $DISPLAY
+:5
+
+r$ wcwc shell -l root/kl5ziao
+s$ root
+root [0] TBrowser b
+#+end_example
+You will notice this is far faster than X11 forwarded over SSH.
+
+The connection can be broken simply by hitting ~Ctrl-c~ in the local terminal:
+#+begin_example
+l$ <Ctrl-c>
+#+end_example
+This will leave the remote Xpra running.  You can reconnect and see the previous windows still running:
+#+begin_example
+l$ xpra attach --ssh=ssh ssh://hierocles.phy.bnl.gov/5
+#+end_example
+
+To finally stop the remote Xpra you may either run this on your local account:
+#+begin_example
+l$ xpra stop --ssh=ssh ssh://hierocles.phy.bnl.gov/5
+#+end_example
+Or, on the remote end:
+#+begin_example
+r$ xpra list
+r$ xpra stop 5
+#+end_example
+Or, simply use ~ps~ and ~kill~ manually.
+
+
 ** Troubles
 :PROPERTIES:
 :CUSTOM_ID: ssh-troubles
@@ -456,7 +533,7 @@ This may be required to finally get correct IDs:
 - A WCWC workstation shall have ~/home~ as an automount volume controlled by a map in IDM as detailed next.
 - The user ID number for ~$HOME~ NFS-exported by any home provider (WCWC or non-WCWC) must be made unique according to the WCWC schema and the ownership and permission of user's files modified to reflect that.
 - The ID for a user that is a BNL employee must be  equal to the employee (aka "life") number.
-- The ID for a user that is a BNL guest is formed by taking the last 4 digits of the guest number and prepending it with ~L - 'A' + 1~ where "~L~" is the prefix letter expressed in ASCII and "~'A'~" is the ASCII encoding for "A".
+- The ID for a user that is a BNL guest is formed by taking the 4 digits of the guest number and prepending it with ~L - 'A' + 10~ where "~L~" is the prefix letter expressed in ASCII and "~'A'~" is the ASCII encoding for "A".
 
   In order to migrate to a new user ID number the user must logout of the workstation and otherwise kill any running process.  As user ~root~
 #+begin_example
@@ -485,7 +562,7 @@ Adding a "homeless" user requires variant of what is described in section [[#fre
 #+end_note
 
 1. FreeIPA: Identity -> User -> username -> User Groups -> +Add -> add to "wcwc".
-2. FreeIPA: Identity -> ID Views -> ~wcwc~ -> Users -> +Add -> Add user ID override (user, login, uid, gid, shell, home)
+2. FreeIPA: Identity -> ID Views -> ~wcwc~ -> Users -> +Add -> Add user ID override (user, login, uid, gid, shell, home)  (see section #home-provider-uid for how to form UID from BNL Life or Guest identifier)
 3. FreeIPA: Network Services -> wcwc-u -> auto.u -> +Add -> key: username, mount: 
 #+begin_example
 -fstype=nfs4 -sync,rw,soft,sec=sys,proto=tcp,port=2049 lycastus.phy.bnl.gov:/home/&
@@ -496,7 +573,7 @@ Adding a "homeless" user requires variant of what is described in section [[#fre
   # cp /etc/skel/.* /nfs/home/USER/
   # chown -R USER:USER /nfs/home/USER/
 #+end_example
-5. Check on NFS-client:
+5. Check on NFS-client (not ~lycastus~):
 #+begin_example
   $ getent passwd USER
   $ ls -la /u/USER
