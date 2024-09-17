@@ -23,10 +23,28 @@ all_wcwc:
     wcwc_path: /wcwc
     wcwc_lan: '130.199.22.0/23'
 
-# workstations that nfs-mount /wcwc
-wcwc_nfs_mounters:
-  children:
-    workstations:
+# automount /wcwc
+wcwc_nfs_automounters:
+  hosts:
+    heracles.phy.bnl.gov:
+    aswork.phy.bnl.gov:
+
+# rsync /wcwc.  Before moving a host from automount to rsync be sure to REMOVE
+# the automounting config.  Remove /etc/auto.wcwc,
+# /etc/auto.master.d/wcwc.autofs, /etc/auto.direct and its line in
+# /etc/auto.master and "service sssd restart" and "service autofs restart" and
+# make sure "mount|grep wcwc" is clean.  Yes, this should all be ansiblized....
+wcwc_rsyncers:
+  hosts:
+    hierocles.phy.bnl.gov:
+    wcgpu0.phy.bnl.gov:
+    wcgpu1.phy.bnl.gov:
+    
+
+# # workstations that nfs-mount /wcwc
+# wcwc_nfs_mounters:
+#   children:
+#     workstations:
     
 
 # systems providing /wcwc via NFS
