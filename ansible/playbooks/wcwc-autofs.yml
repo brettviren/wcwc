@@ -1,0 +1,16 @@
+---
+- name: Configure WCWC workstation - run ipa-client-install manually first
+  hosts: wcwc_nfs_automounters
+  remote_user: root
+
+  tasks:
+    - name: Enable direct mounts
+      ansible.builtin.lineinfile:
+        path: /etc/auto.master
+        line: '/- /etc/auto.direct'
+        create: true
+    - name: Provide /wcwc via autofs
+      ansible.builtin.lineinfile:
+        path: /etc/auto.direct
+        line: '/wcwc -ro,defaults,_netdev lycastus.phy.bnl.gov:/wcwc'
+        create: true

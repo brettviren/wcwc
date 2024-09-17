@@ -1,0 +1,37 @@
+---
+- name: Configure WCWC workstation to lsync/rsync /wcwc
+  hosts: wcwc_rsyncers
+  remote_user: root
+
+  tasks:
+
+    - name: Add the wcwc-sync user
+      ansible.builtin.user:
+        name: wcwc-sync
+        comment: WCWC Sync User
+        create_home: yes
+        shell: /bin/bash
+        home: /etc/wcwc/sync
+        system: true
+
+    - name: Install lsyncd SSH key
+      ansible.posix.authorized_key:
+        user: wcwc-sync
+        state: present
+        key: "{{ lookup('file', 'id_lsyncd.pub') }}"
+
+    - name: Install lsyncd config
+      ansible.builtin.lineinfile:
+        path: "/etc/lsyncd/lsyncd.conf.lua"
+        line: 'sync { wcwc_sync, target = "wcwc-sync@{{ inventory_hostname }}:/wcwc/" }'
+      delegate_to: "lycastus.phy.bnl.gov"
+      register: lsyncd_restart
+
+
+    - name: Restart lsyncd
+      service:
+        name: lsyncd
+        state: restarted
+      when: lsyncd_restart.changed
+      delegate_to: "lycastus.phy.bnl.gov"
+
