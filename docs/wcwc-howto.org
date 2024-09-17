@@ -33,6 +33,9 @@ $ wcwc find
 
 * Use PyTorch
 
+This section describes some ways to use PyTorch.
+See also [[file:wcwc-packages.org::#torch]] and [[file:wcwc-packages.org::#cuda]].
+
 ** The ~py-torch~ spec
 
 In particular ~py-torch~ can require variants to be specified.  In particular with or without CUDA and in some cases the CUDA compute capability (aka CC aka ~cuda_arch~) must be included.  Some typical, though partially specified variants are:
@@ -278,6 +281,25 @@ Some explanation:
 - The ~--with-*=no~ flags are used to avoid features not required in order reduce build time.
 - Boost can not currently be auto-detected in ~$PREFIX~ so we must be explicit (see [[https://github.com/WireCell/wire-cell-toolkit/issues/334][#334]]).
 - We say to use the faster Go Jsonnet library instead of the default C++ ~libjsonnet~.
+
+To use Torch, one needs to add the variant ~+torch~ to the WCT Spack package and then to build WCT for development some special help to ~./wcb~ is needed as Spack's ~py-torch~ package installs Torch libraries in an unconventional location:
+#+begin_example
+$ ./wcb configure [...] \
+        --with-libtorch=$PREFIX/lib/python3.11/site-packages/torch 
+#+end_example
+Similarly, to use CUDA one needs to add the variants ~+cuda~ one needs:
+#+begin_example
+$ ./wcb configure [...] \
+        --with-cuda=$PREFIX/targets/x86_64-linux
+#+end_example
+These two variants may be combined (~+torch+cuda~) for Torch + CUDA and likewise the ~./wcb~ commands are composed:
+#+begin_example
+$ ./wcb configure [...] \
+        --with-cuda=$PREFIX/targets/x86_64-linux \
+        --with-libtorch=$PREFIX/lib/python3.11/site-packages/torch 
+#+end_example
+
+
 
 ** Build WCT
 :PROPERTIES:

@@ -430,6 +430,43 @@ The WCWC admin runs:
 
 
 
+** Provide /wcwc
+
+A few methods are supported to provide the ~/wcwc~ directory that contains all the software packages built by Spack.  The "sync" method is recomended if a workstation has sufficient disk space for ~/wcwc~ to be a mirror.  Otherwise, the workstation owner should choose ~autofs~ for robustness against loss of server or ~fstab~ for less robustness but to avoid automount delays.  Details on these pros and cons and other issues for each choice are in the following sections.
+
+*** NFS mount via ~autofs~.
+
+This method requires no client-side disk space.  It is the most robust of the two NFS-based options for the case where connectivity to the NFS server is interrupted.  However, there will be long delays (up to about one minute) each time an NFS mount is accessed any time after ~autofs~ has unmounted it.  Because ~/wcwc~ is mounted on ~/~ these delays can manifest when issuing commands that are seemingly unrelated to ~/wcwc~.
+
+To make a client mount ~/wcwc~ via autofs they should be in the ~wcwc_nfs_automounters~ group in the Ansible inventory.  This will apply configure a "direct" autofs entry:
+#+begin_example
+$ cat /etc/auto.direct
+/wcwc -ro,defaults,_netdev lycastus.phy.bnl.gov:/wcwc
+#+end_example
+
+*** NFS mount via ~fstab~.
+
+This method requires no client-side disk space.  After mounting at boot time ~/wcwc~ mount remains and there are not ongoing delays waiting for autofs to remount.  However, if the server is ever not responsive then the accessing ~/wcwc~ will hang, including a boot time.  To apply this option add a line to ~/etc/fstab~ like:
+
+#+begin_example
+lycastus.phy.bnl.gov:/wcwc /wcwc nfs ro,defaults,_netdev 0 0
+#+end_example
+
+
+*** Mirror via ~lsyncd/rsync~
+
+This method avoids all the problems of NFS but requires substantial disk space and on going operations to keep the copy up to date.  At time of writing, ~/wcwc~ holds 85 GB and it is still young.  Options may be developed in the future to enable mirroring a subset.
+
+The mirroring is performed by ~lsyncd~ on running on the ~lycastus~ server.  It utilizes requires ~rsync~ over SSH to a special account ~wcwc-sync~ on each workstation in this category.
+
+The configuration of the workstation, including creating the ~wcwc-sync~ user, installing the ~lsyncd~ SSH public key and including the workstation as an ~lsyncd~ target is handled by adding the host to ~wcwc_rsyncers~ and running:
+#+begin_example
+ansible-playbook  ansible/playbooks/wcwc-rsync.yml
+#+end_example
+
+
+
+
 ** User accounts
 :PROPERTIES:
 :CUSTOM_ID: bnl-accounts
@@ -604,6 +641,10 @@ Here are the steps to take, assuming a Debian-like system.
 #+begin_example
 -fstype=nfs4 -sync,rw,soft,sec=sys,proto=tcp,port=2049 ANNEXED.phy.bnl.gov:/home/&
 #+end_example
+
+
+
+** Autofs overview
 
 
 
@@ -845,3 +886,4 @@ $ ./bin/wcwc-sync
 #+begin_note
 In the future, the sync parts of this workflow may become incorporated into ~wcwc~.
 #+end_note
+
