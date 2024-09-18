@@ -93,9 +93,79 @@ $ python -c 'import torch; print(torch.cuda.device_count())'
 :CUSTOM_ID: spack-view-wct
 :END:
 
-A Spack View is simply a single directory tree that contains all files from a set of installed packages via symlinks.  It forms the kernel of a Spack Environment but it may be used directly without the need for Spack to manage your shell environment settings.  Instead, the tool [[https://direnv.net][direnv]] will supply shell environment management in a simple and transparent way.
+** Quick start
 
-This section will walk through creating a View based on an instance of ~wire-cell-toolkit~ for the purpose of fixing a bug in the HDF5 support.  The example can be adapted to produce a view based on other package instances and for other purposes.
+To create a default developer area at ~<path>~ run:
+
+#+begin_example
+$ wcwc task wct-dev-view <path>
+#+end_example
+
+For options see:
+#+begin_example
+$ wcwc task wct-dev-view --help
+#+end_example
+
+Next, examine and possible modify the ~direnv~ configuration file
+#+begin_example
+$ emacs <path>/.envrc
+#+end_example
+
+When happy, enter the directory and enable the environment
+#+begin_example
+$ cd <path>/
+$ direnv allow
+#+end_example
+Anytime later you may edit ~.envrc~ and ~direnv allow~ the changes.
+
+The initial command will have printed initial guidance on building the development area which are illustrated here.  First, install the cloned ~wire-cell-python~:
+#+begin_example
+$ cd <path>/python
+$ pip install -e .
+#+end_example
+This installs into a Python virtual environment that is automatically activated by ~direnv~.  You will typically not need to examine it but it resides under ~<path>/.direnv/~.
+
+Next, configure ~wire-cell-toolkit~ to build:
+#+begin_example
+$ cd <path>/toolkit
+$ ./wcb configure --prefix=$PREFIX --boost-mt --boost-libs=$PREFIX/lib --boost-include=$PREFIX/include --with-jsonnet-libs=gojsonnet
+#+end_example
+See ~./wcb --help~ for all the many ~--with-*~ options.  This minimal example will automatically locate many of the externals provided in the "view".
+
+Finally, build:
+#+begin_example
+$ ./wcb
+#+end_example
+You may then run ~wire-cell~, other WCT application programs and the many WCT test programs as well as Wire-Cell Python programs:
+#+begin_example
+$ wire-cell --help
+
+$ which wire-cell
+<path>/toolkit/build/apps/wire-cell
+
+$ ./build/util/wcdoctest-util
+
+$ ./build/util/test_testing
+
+$ wirecell-util --help
+#+end_example
+
+With the environment configured by ~<path>/.envrc~ you do not need to run ~./wcb install~.
+But, if you do files are installed into the view tree.
+
+The next section gives some explanation of what was just made and the remaining sections give details about this developer environment including how to create it by hand.
+
+** Explanation
+
+The developer area is based on a Spack "view" providing the required external packages.  A Spack view is a directory tree that represents the union of the directory tree of all the external packages.  This is simply a directory tree with all the package files symlinked.
+
+
+A view happens to form the kernel of a Spack Environment but here we use it effectively by itself.
+It is possible to use a Spack Environment to provide a developer area but using a view directly results in a simpler, more transparent result.
+
+However, a view has no shell environment aspect and it is convenient to replace this aspect that otherwise a Spack Environment may supply with something.  Here, [[https://direnv.net][direnv]] fills that gap.  It allows the developer to directly and easily modify the environment simply editing the ~<path>/.envrc~ file which is similar, if not exactly like a shell "rc" aka "setup" script.  Note, never "source" a ~.envrc~ file but instead rely on ~direnv~ to apply it to your shell session.
+
+In the above quick start, the initial ~.envrc~ file sets the various ~PATH~-like variables to directories in the "view" tree as well as directories under the WCT's ~<path>/toolkit/build/~ directory (to avoid needing ~./wcb install~).  In addition, a Python virtual environment is configured so that the ~pip install~ inside ~<path>/python/~ makes the ~wire-cell-python~ package available for use.
 
 ** Configure your shell for ~direnv~
 :PROPERTIES:
@@ -109,22 +179,13 @@ On BNL WCWC this step is performed by the system for the user.  For other users 
 :CUSTOM_ID: view-seeds
 :END:
 
-A view is built given one or more instances of packages that are already installed in the general Spack install tree.  We must specify each seed package with an unambiguous "spec".  
-The most precise and robust way to do that is to supply the "hash" by which Spack identifies the package instance.  Available hashes for a given package can be discovered with:
+A view must be created with one or more "seed" packages.  These are installed package instances (Spack specs).  By default, ~wct task wct-dev-view~ will select an installed ~wire-cell-toolkit~ as a single seed simply by picking the last one listed (specifically via ~spack find --json wire-cell-toolkit~).  One or more seeds can be given explicitly:
 #+begin_example
 $ wcwc find -lv wire-cell-toolkit
--- linux-debian12-x86_64 / clang@17.0.6 -------------------------
-jh6gdsn wire-cell-toolkit@0.28.0~cppjsonnet+cuda+emacs+glpk+hdf+root+tbb+torch build_system=generic cuda_arch=89 cxxstd=17
-ghw2if5 wire-cell-toolkit@master~cppjsonnet+cuda~emacs+glpk+hdf+root+tbb+torch build_system=generic cuda_arch=89 cxxstd=17
 
--- linux-debian12-x86_64 / gcc@12.2.0 ---------------------------
-3pzitmq wire-cell-toolkit@master~cppjsonnet+cuda~emacs~glpk~hdf~root+tbb+torch build_system=generic cuda_arch=89 cxxstd=17
-q3zolqz wire-cell-toolkit@master~cppjsonnet+cuda~emacs+glpk+hdf+root+tbb+torch build_system=generic cuda_arch=89 cxxstd=17
-==> 4 installed packages
-#+end_example
-We pick the instance built by GCC and with HDF5 support (~+hdf~ not =~hdf= build variant).  That spec is "spelled":
-#+begin_example
-wire-cell-toolkit/q3zolqz
+# Pick one and name it by its hash
+
+$ wcwc task wct-dev-view --seed wire-cell-toolkit/q3zolqz
 #+end_example
 
 ** Create the view
@@ -132,7 +193,7 @@ wire-cell-toolkit/q3zolqz
 :CUSTOM_ID: create-view
 :END:
 
-Generically, we create the view with a command like:
+The ~wcwc task wct-dev-view~ command does this for you but if you wish to build the view manually you may use the lower-level ~wcwc view~ command like:
 #+begin_example
 $ wcwc view -S STACK -e EXCLUDE -d TOPDIR -s SEED/HASH TOPDIR/VIEWDIR
 #+end_example
@@ -200,54 +261,25 @@ You may of course wish to remove the top level directory as well:
 $ rm -rf hio-fix/
 #+end_example
 
-** Get the source
+
+** Get the source to develop
 :PROPERTIES:
 :CUSTOM_ID: clone-source
 :END:
-We will get the WC-toolkit and WC-python source.  If you are a WC developer with push privileges, you should clone the source via SSH keys using hte ~git@~ URL:
+The ~wcwc task wct-dev-view~ command will automatically clone ~wire-cell-toolkit~ and ~wire-cell-python~.  By default it will check out the ~master~ branch of each.  The ~wire-cell-toolkit~ branch can be chosen at creation time:
 #+begin_example
-  $ cd hio-fix/
-  $ git clone git@github.com:WireCell/wire-cell-python.git  python
-  $ git clone git@github.com:WireCell/wire-cell-toolkit.git toolkit
-  $ git clone git@github.com:WireCell/wire-cell-data.git    wcdata
+$ wcwc task wct-dev-view --ref apply-pointcloud
 #+end_example
-Otherwise, you may use the ~https://~ URLs or fork the package(s) to your own GitHub account and use those URLs.
+You can of course later use ~git switch~ etc to change your clone.
 
 ** Customize ~.envrc~ for WCT
 :PROPERTIES:
 :CUSTOM_ID: custom-envrc
 :END:
 
-The ~wcwc view~ initializes ~.envrc~ as a generic starting point.  Here, we will customize it to provide support specifically for WCT development.  To start with 
-#+begin_example
-    # Locate the "wire-cell" and other WCT programs.
-    PATH_add $PWD/toolkit/build/apps
+If the low level ~wcwc view~ command is used, the ~.envrc~ is initialized with minimal configuration that can serve as a good but generic starting point.  The ~wcwc task wct-dev-view~ will provide a more full-featured configuration tailored to WCT development (as described above).
 
-    # Locate the as-built libraries
-    for pkg in apps aux clus gen hio iface img pgraph pytorch root sigproc sig sio tbb util
-    do
-        path_add LD_LIBRARY_PATH $PWD/toolkit/build/$pkg
-    done
-
-    # Locate the "bats" program and configure its load path.
-    PATH_add $PWD/toolkit/test/bats/bin
-    export BATS_LIB_PATH=$PWD/toolkit/test
-
-    # Locate WCT configuration files.
-    path_add WIRECELL_PATH $PWD/toolkit/cfg
-#+end_example
-The above is generic to any view-based WCT dev setup.  You may simply copy-paste it into your own ~.envrc~.
-
-Finally, we locate the ~wire-cell-data~ contents.  This is often user-specific but with the clone performed above you may include this with::
-#+begin_example
-  path_add WIRECELL_PATH $PWD/wcdata
-#+end_example
-In the future, WC "data" configuration files will be provided as a Spack package (see [[https://github.com/WireCell/wire-cell-spack/issues/14][wire-cell-spack/issues/14]]).
-
-#+begin_note
-- After any modifications of ~.envrc~ we will be prompted for and must run ~direnv allow~ to authorize the changes.
-- Be aware that our custom ~.envrc~ file will be moved aside and replaced if we ever rerun ~wcwc view~.
-#+end_note
+The developer is encouraged to edit ~<path>/.envrc~ as/if needed.  After a change to ~.envrc~, a ~direnv allow~ must be reissued.
 
 ** Install ~wire-cell-python~
 :PROPERTIES:
@@ -290,53 +322,25 @@ $ ./wcb configure [...] \
 Similarly, to use CUDA one needs to add the variants ~+cuda~ one needs:
 #+begin_example
 $ ./wcb configure [...] \
-        --with-cuda=$PREFIX/targets/x86_64-linux
+        --with-cuda-lib=/usr/lib/x86_64-linux-gnu,$PREFIX/targets/x86_64-linux
 #+end_example
 These two variants may be combined (~+torch+cuda~) for Torch + CUDA and likewise the ~./wcb~ commands are composed:
 #+begin_example
 $ ./wcb configure [...] \
-        --with-cuda=$PREFIX/targets/x86_64-linux \
+        --with-cuda-lib=/usr/lib/x86_64-linux-gnu,$PREFIX/targets/x86_64-linux
         --with-libtorch=$PREFIX/lib/python3.11/site-packages/torch 
 #+end_example
+Note the two library paths for CUDA are required as Spack's ~cuda~ package provides CUDA libraries *except* ~libcuda.so~.  The NVIDIA "driver" package provides ~libcuda.so~.  The example here is for Debian.
 
-
-
-** Build WCT
-:PROPERTIES:
-:CUSTOM_ID: build-wct
-:END:
-
-After configuring the build, we do the build itself in the usual way:
-#+begin_example
-$ ./wcb
-#+end_example
-With the ~.envrc~ customization from section [[#custom-envrc]] we may now use the results.
-#+begin_example
-$ wire-cell --version
-$ wire-cell --help
-#+end_example
-
-
-** Installing WCT to view
-:PROPERTIES:
-:CUSTOM_ID: install-wct
-:END:
-
-
-With the customization to run ~wire-cell~ "in place" from the ~toolkit/build/~ directory, no installation is required.  Nonetheless, we may install WCT in the usual way:
-#+begin_example
-$ ./wcb install
-#+end_example
-This will install into the view directory as we configured the builder with ~--prefix=$PREFIX~.
 
 ** Post-hoc exclusion of package files from a view
 :PROPERTIES:
 :CUSTOM_ID: convert-user-to-dev
 :END:
 
-When running the ~wcwc view~ command above, we used ~wire-cell-toolkit~ for the seed and we also excluded it with the ~-e/--exclude~ option.  This results in a view that contains all the dependencies for ~wire-cell-toolkit~ but not the files for ~wire-cell-toolkit~ itself.  It is useful to exclude ~wire-cell-toolkit~ files to avoid any confusion between the versions provided by the Spack package instance and the versions we wish to build from our cloned source.
+When running the ~wcwc view~ command as above (or implicitly when using ~wcwc task wct-dev-view~) we used ~wire-cell-toolkit~ for the seed and we also excluded its files from the view with the ~-e/--exclude~ option.  This results in a view that contains all the dependencies for ~wire-cell-toolkit~ but not the files for ~wire-cell-toolkit~ itself.  It is useful to exclude ~wire-cell-toolkit~ files to avoid any confusion between the versions provided by the Spack package instance and the versions we wish to build from our cloned source.
 
-Sometimes we may forget to exclude ~wire-cell-toolkit~ files.  We can simply ~rm~ the entire area but it is often easier to simply remove the WCT files from the view.  This can be done simply with:
+When building the view by hand it is possible to forget to exclude the ~wire-cell-toolkit~ files.  If this happens the view can be removed and remade or simply ~rm~ the WCT files as:
 #+begin_example
 $ rm -rf hio-fix/local/bin/{wire-cell,wc*} \
          hio-fix/local/lib/libWireCell* \

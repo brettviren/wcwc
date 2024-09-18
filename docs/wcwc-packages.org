@@ -232,6 +232,12 @@ wcwc@haiku:~$ nvidia-smi  -L
 GPU 0: NVIDIA GeForce GTX 750 Ti (UUID: GPU-b87cc150-ba6d-329e-02e4-7f8ddef6a581)
 #+end_example
 
+Receiving this error:
+#+begin_example
+Cuda error in file '.../file.cu' in line XX : no kernel image is available for execution on the device.
+#+end_example
+Indicates CUDA code was not compiled to target the device (GPU card) compute capability version.
+
 ** CUDA and Spack
 :PROPERTIES:
 :CUSTOM_ID: cuda-spack
