@@ -261,7 +261,6 @@ You may of course wish to remove the top level directory as well:
 $ rm -rf hio-fix/
 #+end_example
 
-
 ** Get the source to develop
 :PROPERTIES:
 :CUSTOM_ID: clone-source
@@ -332,6 +331,12 @@ $ ./wcb configure [...] \
 #+end_example
 Note the two library paths for CUDA are required as Spack's ~cuda~ package provides CUDA libraries *except* ~libcuda.so~.  The NVIDIA "driver" package provides ~libcuda.so~.  The example here is for Debian.
 
+** Post-hoc adding more packages to the view
+One may delete the view directory and remake it with additional seeds or add more after the fact.  Assuming the view directory is named ~local/~:
+#+begin_example
+wcwc spack view -d yes add -i local arrayfire+cuda
+#+end_example
+
 
 ** Post-hoc exclusion of package files from a view
 :PROPERTIES:
@@ -347,6 +352,67 @@ $ rm -rf hio-fix/local/bin/{wire-cell,wc*} \
          hio-fix/local/include/WireCell* 
 #+end_example
 
+
+* Run inside a container
+
+You may work inside a platform other than what is provided by the WCWC host operating system by running a "container".  In particular, this can provide a good way to use obsolete operating systems such as Scientific Linux 7 in order to utilize legacy UPS packages.
+
+** Quick start
+
+#+begin_example
+$ wcwc container
+Apptainer> cat /etc/redhat-release 
+Scientific Linux release 7.9 (Nitrogen)
+Apptainer> exit  # or Ctrl-d
+#+end_example
+While in the container you will have access to your ~$HOME~ and other areas provided by the host operating system.
+
+** Choosing a container
+
+The ~wcwc container~ is really a simplified version of the ~apptainer~ command.  This command and Apptainer (aka Singularity) container images are taken from CVMFS.  You may specify the container image through a nick name, a relative or absolute path or a URL.   Known nick names can be listed:
+#+begin_example
+$ wcwc container --list-nicks
+known images in /cvmfs/singularity.opensciencegrid.org
+nick       image
+sl7        fermilab/fnal-dev-sl7:latest
+rhel7      cmssw/cms:rhel7
+centos7    cmssw/cms:rhel7
+rhel8      cmssw/cms:rhel8
+alma8      cmssw/cms:rhel8
+al8        cmssw/cms:rhel8
+rhel9      cmssw/cms:rhel9
+alma9      cmssw/cms:rhel9
+al9        cmssw/cms:rhel9
+#+end_example
+This list may change in the future.
+
+#+begin_example
+$ wcwc container --image al9
+Apptainer> cat /etc/redhat-release 
+AlmaLinux release 9.4 (Seafoam Ocelot)
+#+end_example
+
+Relative paths are taken w.r.t. the ~--base~ path.
+#+begin_example
+$ wcwc container --image cmssw/cms:rhel7
+Apptainer> cat /etc/redhat-release 
+CentOS Linux release 7.9.2009 (Core)
+#+end_example
+An absolute path or an Apptainer-compatible URL may also be specified with ~-i/--image~.
+
+** Accessing files
+
+Native directories and files may be mounted into the container.  A set of default mounts appropriate for the BNL WCWC instance is provided.  They can be listed:
+#+begin_example
+$ wcwc container --list-mounts
+/cvmfs /home /nfs /opt /run/user /etc/hostname /etc/hosts /etc/krb5.conf
+#+end_example
+This list may change.  You may add to this with ~-m/--mount~.  This mount list is comma separated and if the host path differs from the container path the two may be separated with a colon.
+#+begin_example
+$ wcwc container -m /mybigdisk:/data
+$ ls -l /data
+#+end_example
+If any mounts are given by ~-m/--mounts~ that do not exist on the host file system an error will be generated.  Any missing default mounts will result in a warning.
 
 * Add existing package to a Spack Environment
 
