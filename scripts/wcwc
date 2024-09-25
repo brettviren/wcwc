@@ -1215,11 +1215,17 @@ def cmd_show(ctx, format, stacks):
             info (str(stack.cfg))
     
 
-def do_shell(ctx, stacks, shell, output, command, environment, load, keep):
+def shell_extension(shell):
     '''
-    Body of shell command for user and admin.
+    Return canonical file extension for a given shell
     '''
+    return dict(sh="sh",bash="sh",dash="sh",zsh="sh",fish="fish",csh="csh",tcsh="csh")[shell]
 
+
+def pick_shell(shell):
+    '''
+    Return shell to use given a name.
+    '''
     # figure out target shell
     if shell == "auto":
         shell = os.environ.get("SHELL",None)
@@ -1229,8 +1235,16 @@ def do_shell(ctx, stacks, shell, output, command, environment, load, keep):
         if not shell:
             raise ValueError("can not divine shell, give it explicitly")
     shell = shell.split("/")[-1].strip()
+    return shell
 
-    ext = dict(sh="sh",bash="sh",dash="sh",zsh="sh",fish="fish",csh="csh",tcsh="csh")[shell]
+
+def do_shell(ctx, stacks, shell, output, command, environment, load, keep):
+    '''
+    Body of shell command for user and admin.
+    '''
+
+    shell = pick_shell(shell)
+    ext = shell_extension(shell)
     script = ctx.obj.spack.path("source")  / "share" / "spack" / f"setup-env.{ext}"
     script = str(script)
 
@@ -1294,6 +1308,7 @@ def do_shell(ctx, stacks, shell, output, command, environment, load, keep):
         os.execvpe("tcsh", ["tcsh","-i","-b", rcfile.name],env)
 
     raise click.UsageError(f'execute unsupported for shell: "{shell}", try one of: {supported_shells}')
+
 
 @cli.command("shell")
 @click.option("-S","--stacks", default=None, type=str, 
@@ -1386,6 +1401,7 @@ path_add PKG_CONFIG_PATH "$PREFIX/lib64/pkgconfig"
     envrc.write_text(envrc_text)
     info(f'To use the view:\ncd {direnv} && direnv allow')
 
+
 @cli.command("view")
 @use_stacks()
 @click.option("-e","--exclude", default=[], multiple=True,
@@ -1404,6 +1420,7 @@ def cmd_view(ctx, stacks, spack_exe, exclude, direnv, seed, force, view):
     '''
 
     do_view(stacks, spack_exe, exclude, direnv, seed, force, view)
+
 
 # disable auto-help so we pass on "-h/--help" to spack.
 @cli.command("spack", context_settings={ "ignore_unknown_options":True,
@@ -1431,7 +1448,101 @@ def cmd_spack(ctx, stacks, spack_exe, args):
     return got.returncode
 
 
+@cli.command("container")
+@click.option("--base", default="/cvmfs/singularity.opensciencegrid.org",
+              help="Set base for images from the file system")
+@click.option("--list-nicks", default=False, is_flag=True,
+              help="List known image nick names and exit")
+@click.option("--list-mounts", default=False, is_flag=True,
+              help="List default mounts")
+@click.option("-i","--image", default="sl7",
+              help="Name container by nick name, relative or absolute path (default=sl7")
+@click.option("-s","--shell",
+              default="auto",
+              type=click.Choice(["bash","zsh","tcsh","auto"]),
+              help="Set the shell flavor, default:auto")
+@click.option("-m","--mounts",
+              default="",
+              help="Comma-separated list of local paths to mount")
+def cmd_container(base, list_nicks, list_mounts, image, shell, mounts):
+    '''
+    Execute a shell in a container.
+
+    The -i/--image may be a nick name, a relative or absolute path or a URL.
+    Relative paths are w.r.t. --base.
+    '''
+
+    # Translate from a nick name to an image in CVMFS.  Yeah, no way this list
+    # will grow to a ridiculous length over time.
+    image_nicks = dict(sl7="fermilab/fnal-dev-sl7:latest",
+                       rhel7="cmssw/cms:rhel7",
+                       centos7="cmssw/cms:rhel7",
+                       rhel8="cmssw/cms:rhel8",
+                       alma8="cmssw/cms:rhel8",
+                       al8="cmssw/cms:rhel8",
+                       rhel9="cmssw/cms:rhel9",
+                       alma9="cmssw/cms:rhel9",
+                       al9="cmssw/cms:rhel9",
+                       )
+    if list_nicks:
+        info(f'known images in {base}')
+        info('nick       image')
+        for nick, image in image_nicks.items():
+            info(f'{nick:10} {image}')
+        return
+    default_mounts = "/cvmfs /home /nfs /opt /run/user /etc/hostname /etc/hosts /etc/krb5.conf"
+    if list_mounts:
+        info(default_mounts)
+        return
+
+    image = image_nicks.get(image,image)
+    if image.startswith("/") or "://" in image:
+        debug(f'absolute image location: {image}')
+    else:
+        image =  f'{base}/{image}'
+    debug(f'loading image {image}')
+
+    shell = pick_shell(shell)
+    supported_shells = 'bash zsh tcsh'.split()  # what is likely in the container
+    if shell not in supported_shells:
+        debug(f'{shell} is not supported, using bash')
+        shell = "bash"
+    shellp = f'/usr/bin/{shell}'
+    os.environ['SHELL'] = shellp
+
+    to_mount = list()
+    for one in default_mounts.split():
+        if one in to_mount:
+            continue
+        parts = one.split(":")
+        if not os.path.exists(parts[0]):
+            warn(f'default mount does not exist on host, skipping: {one}')
+            continue
+        to_mount.append(one)
+    if mounts:
+        mount_errors = 0
+        for one in mounts.split(","):
+            if one in to_mount:
+                continue
+            parts = one.split(":")
+            if not os.path.exists(parts[0]):
+                error(f'user mount does not exist on host: {one}')
+                mount_errors += 1
+                continue
+            to_mount.append(one)
+        if mount_errors:
+            sys.exit(1)
+        
+    mounts = ','.join(to_mount)
+
+    app = "/cvmfs/oasis.opensciencegrid.org/mis/apptainer/current/bin/apptainer"
+    cmd = f'{app} shell --shell={shellp} -B {mounts} --ipc --pid {image}'
+    debug(cmd)
+    os.execvp(app, cmd.split())
+
+
 ### ADMIN COMMANDS
+
 
 @cli.group()
 @click.pass_context
@@ -1462,6 +1573,7 @@ def cmd_defaults(ctx, output, force_overwrite):
     info(output)
     ctx.obj.save(output, overwrite=force_overwrite)
 
+
 @admin.command("check-os")
 def cmd_check_os():
     """Check if current running OS is supported"""
@@ -1469,6 +1581,7 @@ def cmd_check_os():
     if got in known_oses:
         return
     raise ValueError(f'not a supported OS: {got}')
+
 
 @admin.command("oses")
 def cmd_oses():

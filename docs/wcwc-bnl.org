@@ -846,9 +846,9 @@ And
   # systemctl restart gdm
 #+end_example
 
-** Installing and developing packages
+** Installing Spack packages
 
-Spack state modifications are performed on a read-write *copy* of ~/wcwc~.  To make the copy:
+Spack state modifications are performed on a read-write *copy* of ~/wcwc~ and never directly on ~/wcwc~  To make the copy:
 #+begin_example
 $ rsync wcwc@lycastus.phy.bnl.gov:/wcwc/ ~/wcwc-dev/
 #+end_example
@@ -859,6 +859,10 @@ rsync -av \
   --exclude "*~" --exclude __pycache__ --exclude stage --exclude cache ~/wcwc-dev/ \
   wcwc@lycastus.phy.bnl.gov:/wcwc/
 #+end_example
+#+begin_note
+This potentially opens a huge race condition if more than one copy is allowed.  To avoid this, a single copy in ~wcwc@wcgpu0~ is the working copy.  A better workflow should be developed.
+#+end_note
+
 
 While it is possible to directly edit files under =~/wcwc-dev/= any installation and use of packages must be done inside a container:
 #+begin_example
@@ -887,3 +891,82 @@ $ ./bin/wcwc-sync
 In the future, the sync parts of this workflow may become incorporated into ~wcwc~.
 #+end_note
 
+** Developing Spack packages
+
+It is common that a Spack package recipe must be updated, if only to bump the supported version(s).  Here is an example of that workflow, starting with entering the container (~c$~ prompt):
+#+begin_example
+u$ wcwc --image=yes --prefix=$HOME/wcwc-dev shell
+c$ spack checksum <package>
+#+end_example
+
+When substantial fixes to the Spack recipe is needed, beyond a new ~version()~ line, it is good to PR it back to Spack.  This is best done out-of-band of WCWC and in a personal fork of Spack:
+
+#+begin_example
+$ git clone git@github.com:USER/spack.git ~/dev/spack-arrayfire
+$ cd ~/dev/spack-arrayfire
+$ git checkout -t -b bugfix-arrayfire origin/develop
+$ source spack/share/spack/setup-env.sh
+$ spack install arrayfire
+#+end_example
+Now, fix the build errors, push to a branch in the personal fork and from there make a PR to spack, proper.
+
+
+
+** The ~/srv~ mount
+:PROPERTIES:
+:CUSTOM_ID: srv
+:END:
+
+
+The wcgpu machines have 2+2+4 TB SSDs (only 3 M.2 slots).
+
+- nvme0 :: 2TB system usage
+- nvme1 :: 2TB root and home
+- nvme2 :: 4TB data
+
+Here is preparing nvme0
+
+#+begin_example
+# fdisk -l
+# df -hl
+# fdisk /dev/nvme0n1
+g
+n 
+w
+# mke2fs /dev/nvme0n1p1
+# blkid /dev/nvme0n1p1
+# emacs /etc/fstab  # mount as /srv
+#+end_example
+
+
+#+begin_note
+The factory partitioning of nvme1 what kept.  It is not optimal and so nvme0 is used to back fill some small system areas.  At some point (yeah, right) the system disk should be repartitioned to better allocate.  Maybe if/when user storage needs upgrading.
+#+end_note
+
+** CVMFS
+
+With ~/srv~ mounted as per section [[#srv]],
+#+begin_example
+# mkdir -p /srv/sys/var/lib/cvmfs  /var/lib/cvmfs
+# emacs /etc/fstab  # bind mount former on latter
+#+end_example
+
+[[https://cvmfs.readthedocs.io/en/stable/cpt-quickstart.html#linux][Install]]
+#+begin_example
+  wget https://ecsft.cern.ch/dist/cvmfs/cvmfs-release/cvmfs-release-latest_all.deb
+  dpkg -i cvmfs-release-latest_all.deb 
+  rm cvmfs-release-latest_all.deb
+  apt-get update
+  apt-get install cvmfs
+  cvmfs_config setup
+  service autofs restart
+
+  cat << EOF > /etc/cvmfs/default.local
+  CVMFS_CLIENT_PROFILE=single
+  CVMFS_REPOSITORIES=larsoft.opensciencegrid.org,uboone.opensciencegrid.org,dune.opensciencegrid.org,dune.osgstorage.org,oasis.opensciencegrid.org,singularity.opensciencegrid.org
+  CVMFS_SERVER_URL="http://cvmfs.sdcc.bnl.gov:8000/cvmfs/@org@;http://cvmfs-s1fnal.opensciencegrid.org:8000/cvmfs/@fqrn@"
+  CVMFS_HTTP_PROXY="http://cvmfs-cache.sdcc.bnl.gov:3128|http://cvmfs-cache.sdcc.bnl.gov:3128;DIRECT"
+  EOF
+
+  cvmfs_config probe
+#+end_example

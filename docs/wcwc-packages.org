@@ -659,6 +659,13 @@ $ pip install tqdm tensorboard
 
 
 
+
+* ArrayFire
+
+#+begin_example
+c$ spack install arrayfire+cuda cuda_arch=89
+#+end_example
+
 * Attention is all you need :noexport:
 
 One implementation of this famous paper for Pytorch is at [[https://github.com/jadore801120/attention-is-all-you-need-pytorch][Attention is all you need]].  
