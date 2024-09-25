@@ -25,6 +25,7 @@
           - git
           - golang-go
           - gpg
+          - graphviz
           - ipython3
           - jupyter
           - keychain
