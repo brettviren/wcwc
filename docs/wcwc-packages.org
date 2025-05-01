@@ -119,6 +119,9 @@ There are several options for using Python and Python packages on WCWC workstati
 With all methods, ~direnv~ can be very helpful to manage and tie environment settings to a directory.  See section [[direnv]].
 
 ** uv
+:PROPERTIES:
+:CUSTOM_ID: uv
+:END:
 
 The [[https://docs.astral.sh/uv][uv]] tool is provided as ~/usr/local/bin/uv~ on WCWC workstations.  This is a fairly new tool on the Python scene but it already provides a wealth of benefits and replaces other tools commonly used.  It can be used in many different modes to easily accomplish many Python related tasks:
 
@@ -211,6 +214,9 @@ Only certain combinations of Spack, Debian and pip packages can be expected to w
 
 
 * Wire-Cell Toolkit
+:PROPERTIES:
+:CUSTOM_ID: wct
+:END:
 
 For developing WCT against Spack packages see: [[file:wcwc-howto.org::#spack-view-wct]].
 
@@ -488,6 +494,9 @@ $ wcwc shell -S wirecell -l ollamalux -c "ollama run aiden_lu/minicpm-v2.6:Q4_K_
 
 
 * Open WebUI
+:PROPERTIES:
+:CUSTOM_ID: openwebui
+:END:
 
 [[https://github.com/open-webui/open-webui][Open WebUI]] provides a web browser user interface to Ollama and other LLM APIs.
 In the future, WCWC may provide a centrally-installed instance of Open WebUI but
@@ -498,6 +507,9 @@ pattern tends to be tied to individual user tasks.
 This section describes ways for the user to run Open WebUI with a local [[Ollama]] and remote APIs.
 
 ** General running of Open WebUI
+:PROPERTIES:
+:CUSTOM_ID: run-openwebui
+:END:
 
 Open WebUI is a Python program and can be run in the "usual ways" as described in the section [[Python]].  The recommended method is with [[uv]].
 
@@ -520,6 +532,9 @@ $ open-webui serve
 
 
 ** Accessing Open WebUI web server
+:PROPERTIES:
+:CUSTOM_ID: access-openwebui
+:END:
 
 By default, Open WebUI serves on localhost port 8080.  If you run a web browser on the same computer that runs Open WebUI simply visit:
 
@@ -532,6 +547,9 @@ On first run of ~open-webui serve~ command, Open WebUI will need some time to do
 On first access of a freshly started Open WebUI server you will be prompted to make an admin account.  
 
 ** Accessing remote Open WebUI
+:PROPERTIES:
+:CUSTOM_ID: remote-openwebui
+:END:
 
 Open WebUI, as we use it on WCWC, should never be exposed to the Internet.  However, it may be accessed remotely via SSH tunnels.
 
@@ -546,6 +564,9 @@ http://127.0.0.1:8080/
 
 
 ** Use with Ollama
+:PROPERTIES:
+:CUSTOM_ID: openwebui-with-ollama
+:END:
 
 While you can "chat" with Ollama directly from the terminal (~ollama run ...~),
 Open WebUI provides many additional conveniences and features.  By default, Open
@@ -560,12 +581,18 @@ $ OLLAMA_BASE_URL=http://127.0.0.1:8054/ open-webui serve
 
 
 ** Use with openai.azure remote APIs
+:PROPERTIES:
+:CUSTOM_ID: openwebui-with-azure-openai
+:END:
 
 While Open WebUI documentation currently (as of v0.6.5) [[https://docs.openwebui.com/getting-started/quick-start/starting-with-openai/][mentions Azure OpenAI]] as being usable, it appears not to work on its own.  There appear to be two ways to use a 3rd party tool to connect Open WebUI with Azure OpenAI:
 - Install the [[https://openwebui.com/f/owndev/azure_ai][azure AI "function"]] to your Open WebUI
 - Use [[https://docs.litellm.ai/docs/providers/azure#azure-o-series-models][litellm]] proxy.
 
 *** Configure and run LiteLLM
+:PROPERTIES:
+:CUSTOM_ID: litellm
+:END:
 
 We describe how to use the second.  First, make a LiteLLM configuration file in YAML syntax that describes each model that you have been "deployed" on Azure OpenAI.  An *API URL* and *API key* are needed as well as the deployment "name" for the model.
 
@@ -615,6 +642,9 @@ GET /v1/models
 section, click "Try it out" and then "execute".  Scroll down a bit and you should see the JSON response listing the models from the LiteLLM ~config.yaml~ file.
 
 *** Connect Open WebUI to LiteLLM
+:PROPERTIES:
+:CUSTOM_ID: openwebui-with-litellm
+:END:
 
 Visit your Open WebUI page, click your avatar/initials, open Admin Panel, Settings, Connections and in Manage OpenAI API Connections, click "+", enter for URL ~http://localhost:4000/v1~.  The API key and list of Model IDs can be left empty.
 
@@ -699,6 +729,9 @@ Out[1]: [<matplotlib.lines.Line2D at 0x7f38adf35cd0>]
 #+end_example
 
 ** Python environment
+:PROPERTIES:
+:CUSTOM_ID: jupyter-env
+:END:
 
 Default use of ~jupyter~ (or ~ipython~) will have available any Python packages installed via Debian packages.  The user may require additional packages which can be provided via ~pip~ or Spack in the usual way, prior to running ~jupyter~.  See section [[#python]].
 
@@ -730,10 +763,16 @@ Now visit the URL in the browser and locate ~myenv~ under ~New->Notebook:~ menu.
 
 
 * Geant4
+:PROPERTIES:
+:CUSTOM_ID: geant4
+:END:
 
 Users / developers working inside an experiment stack will typically have Geant4 included in the dependency tree.  Others may utilize those instances of Geant4.  As usual ~spack find -lv geant4~ will list what is available.  Special-case builds of Geant4 will/can be made available.  
 
 ** Support for DUNE FD3
+:PROPERTIES:
+:CUSTOM_ID: geant4-dune-fd3
+:END:
 
 
 DUNE FD3 simulation uses ~geant4+qt+opengl+x11~
@@ -747,6 +786,10 @@ wsqk5qa geant4@11.2.2~ipo~motif+opengl+qt~tbb+threads~timemory~vecgeom~vtk+x11 b
 
 
 ** Opticks
+:PROPERTIES:
+:CUSTOM_ID: geant4-opticks
+:END:
+
 A likely to-do item is to build Geant4 with support for Opticks.
 
 * DNNROI
@@ -858,6 +901,9 @@ $ pip install tqdm tensorboard
 
 
 * ArrayFire
+:PROPERTIES:
+:CUSTOM_ID: arrayfire
+:END:
 
 #+begin_example
 c$ spack install arrayfire+cuda cuda_arch=89
