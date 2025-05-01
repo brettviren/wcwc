@@ -110,12 +110,17 @@ Unfortunately, as shown, Debian's ~python3-torch~ package does not include CUDA 
 :CUSTOM_ID: python
 :END:
 
-There are several options for using Python and Python packages on WCWC workstations.  
-One may use ~python~ (the program) from Debian or from Spack and one may use Python packages from Debian, Spack or as installed by the user in a Python virtual environment.
+There are several options for using Python and Python packages on WCWC workstations.  Unfortunately, there is not "one size fits all" answer on how to use Python on WCWC (or more broadly).  Rough guidance is to use the first choice from the list below that matches your needs
+
+- Spack ::  If you will work in a Spack environment for other reasons, use Python and Python packages provided with Spack.  When a Spack Python package is unavailable or not appropriate (too old, missing features) you may try to *augment* the Spack *environment* or *view* with Python packages from *uv* or *venv* (see below).  Usage of Spack can help reduce redundant copies of large packages (eg, pytorch) by sharing the central install.
+- uv ::  You need to work with many different, semi-independent Python environments and/or are developing your own Python project.  The ~uv~ tool is very powerful, flexible and highly recommended.  It replaces many older tools like ~venv~ but it may be new to you and so requires some (simple) learning.  Many packages will give examples on how to use ~venv~ and you will need to know to translate those instructions into ~uv~ usage. (see [[uv]] section below).  Use of ~uv~ will share packages between your different usages so can save storage space compared to use of ~venv~.  
+- venv :: You don't want to try new things.
+
+With all methods, ~direnv~ can be very helpful to manage and tie environment settings to a directory.  See section [[direnv]].
 
 ** uv
 
-The [[https://docs.astral.sh/uv][uv]] tool is provided.  This is a fairly new tool on the Python scene but it already provides a wealth of benefits.  It can be used in many different modes to easily accomplish many Python related tasks:
+The [[https://docs.astral.sh/uv][uv]] tool is provided as ~/usr/local/bin/uv~ on WCWC workstations.  This is a fairly new tool on the Python scene but it already provides a wealth of benefits and replaces other tools commonly used.  It can be used in many different modes to easily accomplish many Python related tasks:
 
 - Install various Python packages and of many versions without polluting global namespaces.
 - Install and make available various versions of Python itself.
@@ -123,7 +128,23 @@ The [[https://docs.astral.sh/uv][uv]] tool is provided.  This is a fairly new to
 - Assist in creating and managing Python projects.
 - Provide "better" versions of venv and pip.
 
+Most simply, it can easily run packages, downloading as needed:
+#+begin_example
+$ uv run --with ipython --with numpy --with matplotlib ipython --pylab
+In [1]: plt.plot([0,1],[2,3])
+Out[1]: [<matplotlib.lines.Line2D at 0x7f6a656dd890>]
+#+end_example
   
+The first ~uv run~ may install packages which may take some time while future runs will be quick.  You can also expose these locally installed packages:
+#+begin_example
+$ uv tool install git+https://github.com/brettviren/gegede
+...
+$ which gegede
+/home/bv/.local/bin/gegede
+$ gegede -h
+...
+#+end_example
+
 
 ** Virtual environment
 :PROPERTIES:
@@ -466,34 +487,142 @@ $ wcwc shell -S wirecell -l ollamalux -c "ollama run aiden_lu/minicpm-v2.6:Q4_K_
 
 
 
-** Open WebUI
+* Open WebUI
 
-You may simply chat with ollama via its ~ollama run ...~ command line interface
-while Open WebUI provides an alternative web front end.  It is a Python package
-and is run on a computer with access to ollama's API port as specified by
-~OLLAMA_HOST~ (8054 in this example).  Further, your browser must be able to
-access Open WebUI's HTTP server port (8080 in this example).
+[[https://github.com/open-webui/open-webui][Open WebUI]] provides a web browser user interface to Ollama and other LLM APIs.
+In the future, WCWC may provide a centrally-installed instance of Open WebUI but
+as of now each user must install/run it themselves.  This is mostly due to two
+reasons: the project development is brisk and the specific version and usage
+pattern tends to be tied to individual user tasks.
 
-You may install Open WebUI yourself with virtualenv + pip:
+This section describes ways for the user to run Open WebUI with a local [[Ollama]] and remote APIs.
+
+** General running of Open WebUI
+
+Open WebUI is a Python program and can be run in the "usual ways" as described in the section [[Python]].  The recommended method is with [[uv]].
+
+#+begin_note
+Use of ~open-webui~ may require a newer Python than available by default.  We can tell ~uv~ to use a non-standard python by setting the environment variable: ~UV_PYTHON=3.12.3~.  ~uv~ will automatically install that version of Python as needed.  When ~UV_PYTHON~ is set for a ~uv tool install ...~ command it need not be set when using the installed tools.  We assume this usage below
+#+end_note
+
+To run the Open WebUI server command:
+
 #+begin_example
-python -m venv venv
-source venv/bin/activate
-OLLAMA_BASE_URL=http://127.0.0.1:8054/ open-webui serve
+$ UV_PYTHON=3.12.3 uv run --with open-webui open-webui serve
 #+end_example
 
-Alternatively, you may install and run via ~uv~:
+Or, to install it as a "tool" so you do not need to give ~uv run ...~:
+
 #+begin_example
-OLLAMA_BASE_URL=http://127.0.0.1:8054/ UV_PYTHON=3.12.3 uv run --with open-webui open-webui serve
+$ UV_PYTHON=3.12.3 uv tool install open-webui
+$ open-webui serve
 #+end_example
 
-You may access Open WebUI from your browser after fowarding:
-#+begin_example
-ssh -L 8080:localhost:8080 wcgpu0
-#+end_example
+
+** Accessing Open WebUI web server
+
+By default, Open WebUI serves on localhost port 8080.  If you run a web browser on the same computer that runs Open WebUI simply visit:
 
 http://127.0.0.1:8080/
 
-Select or add a model and start chatting.
+#+begin_note
+On first run of ~open-webui serve~ command, Open WebUI will need some time to download various things.   While that is ongoing, the server may not respond.  Subsequent server starts will require less time.
+#+end_note
+
+On first access of a freshly started Open WebUI server you will be prompted to make an admin account.  
+
+** Accessing remote Open WebUI
+
+Open WebUI, as we use it on WCWC, should never be exposed to the Internet.  However, it may be accessed remotely via SSH tunnels.
+
+Assuming your SSH configuration defines the host ~wcgpu0~ (see [[file:wcwc-bnl.org::#remote-access][Remote access]] for examples) then a tunnel may be constructed by issuing this command to your local computer:
+#+begin_example
+$ ssh -L 8080:localhost:8080 wcgpu0
+#+end_example
+
+And, from the your local computer, visit
+
+http://127.0.0.1:8080/
+
+
+** Use with Ollama
+
+While you can "chat" with Ollama directly from the terminal (~ollama run ...~),
+Open WebUI provides many additional conveniences and features.  By default, Open
+WebUI can connect to a localhost Ollama server (running on same host as Open
+WebUI itself) if Ollama was started in the default manner.  If Ollama server is
+configured to listen on a custom port, that port must be communicated to Open
+WebUI:
+
+#+begin_example
+$ OLLAMA_BASE_URL=http://127.0.0.1:8054/ open-webui serve
+#+end_example
+
+
+** Use with openai.azure remote APIs
+
+While Open WebUI documentation currently (as of v0.6.5) [[https://docs.openwebui.com/getting-started/quick-start/starting-with-openai/][mentions Azure OpenAI]] as being usable, it appears not to work on its own.  There appear to be two ways to use a 3rd party tool to connect Open WebUI with Azure OpenAI:
+- Install the [[https://openwebui.com/f/owndev/azure_ai][azure AI "function"]] to your Open WebUI
+- Use [[https://docs.litellm.ai/docs/providers/azure#azure-o-series-models][litellm]] proxy.
+
+*** Configure and run LiteLLM
+
+We describe how to use the second.  First, make a LiteLLM configuration file in YAML syntax that describes each model that you have been "deployed" on Azure OpenAI.  An *API URL* and *API key* are needed as well as the deployment "name" for the model.
+
+#+begin_note
+Multiple models can be deployed with the same API URL and key.  This is assumed in the example.  Adjust your LiteLM YAML configuration file if various values are relevant.
+#+end_note
+
+Here is an example.
+
+#+begin_src yaml
+model_list:
+  - model_name: o4-mini
+    litellm_params:
+      model: azure/o4-mini
+      api_base: "os.environ/AZURE_API_URL"
+      api_key: "os.environ/AZURE_API_KEY"
+      api_version: 2024-12-01-preview
+  - model_name: gpt-4.1
+    litellm_params:
+      model: azure/gpt-4.1
+      api_base: "os.environ/AZURE_API_URL"
+      api_key: "os.environ/AZURE_API_KEY"
+      api_version: 2024-12-01-preview
+#+end_src
+
+#+begin_note
+This configuration delegates to the user shell environment for the URL (~api_base~) and key.
+#+end_note
+
+#+begin_warning
+Do *not* publicly disclose the API key unless you are willing to pay for the entire Internet using your account.  In particular, keep API keys out of files that are inside ~git~ controlled directories or in general any directories exposed to a web server.
+#+end_warning
+
+To run LiteLLM while providing these values:
+
+#+begin_example
+$ AZURE_API_URL="https://THE-USER-NAME.openai.azure.com/" \
+  AZURE_API_KEY=THE85CHARACTERAPIKEY \
+  uv run --with 'litellm[proxy]' --with 'litellm[extra_proxy]' \
+  litellm --config litellm.yml 
+#+end_example
+
+By default, this will listen on http://localhost:4000.  You may visit this, expand the
+#+begin_example
+GET /v1/models
+#+end_example
+section, click "Try it out" and then "execute".  Scroll down a bit and you should see the JSON response listing the models from the LiteLLM ~config.yaml~ file.
+
+*** Connect Open WebUI to LiteLLM
+
+Visit your Open WebUI page, click your avatar/initials, open Admin Panel, Settings, Connections and in Manage OpenAI API Connections, click "+", enter for URL ~http://localhost:4000/v1~.  The API key and list of Model IDs can be left empty.
+
+#+begin_note
+This use of LiteLLM with no API key or other auth is very insecure and should never be exposed outside of ~localhost~.  
+#+end_note
+
+Save and when starting a New Chat the models from the LiteLLM YAML configuration file should be listed and accessible.
 
 * Jupyter
 :PROPERTIES:

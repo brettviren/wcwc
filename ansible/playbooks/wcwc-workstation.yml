@@ -36,6 +36,7 @@
           - keychain
           - kitty
           - libtree
+          - libpq-dev
           - lsb-release
           - nfs-kernel-server
           - podman
@@ -47,6 +48,8 @@
           - python3-matplotlib
           - python3-numpy
           - python3-pandas
+          - python3-psycopg2
+          - python3-pyaudio
           - python3-torch
           - python3-torchaudio
           - python3-torchtext
@@ -94,4 +97,16 @@
         line: "eval `direnv hook tcsh`"
         create: true
 
-        
+    - name: Provide uv
+      ansible.builtin.copy:
+        src: "{{ lookup('env', 'HOME') }}/sync/bin/uv"
+        dest: /usr/local/bin/uv
+        owner: root
+        mode: '755'
+    - name: Provide uvx
+      ansible.builtin.copy:
+        src: "{{ lookup('env', 'HOME') }}/sync/bin/uvx"
+        dest: /usr/local/bin/uvx
+        owner: root
+        mode: '755'
+      

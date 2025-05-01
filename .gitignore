@@ -9,3 +9,7 @@ my-*
 *.html
 *.pdf
 junk*
+build
+dist
+*.app
+images
