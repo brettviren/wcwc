@@ -24,6 +24,7 @@
           - freeipa-client
           - gfortran
           - git
+          - google-perftools
           - golang-go
           - gpg
           - graphviz
