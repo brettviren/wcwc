@@ -16,6 +16,7 @@
           - ccache
           - coreutils
           - curl
+          - cvmfs
           - direnv
           - distcc
           - environment-modules
@@ -24,12 +25,17 @@
           - freeipa-client
           - gfortran
           - git
+          - google-perftools
           - golang-go
           - gpg
+          - gpustat
+          - graphviz
+          - hdf5-tools
           - ipython3
           - jupyter
           - keychain
           - kitty
+          - libtree
           - lsb-release
           - nfs-kernel-server
           - podman
@@ -50,6 +56,7 @@
           - ripgrep
           - rsync
           - screen
+          - strace
           - tcsh
           - tree
           - tmux

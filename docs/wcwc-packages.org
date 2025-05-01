@@ -113,6 +113,18 @@ Unfortunately, as shown, Debian's ~python3-torch~ package does not include CUDA 
 There are several options for using Python and Python packages on WCWC workstations.  
 One may use ~python~ (the program) from Debian or from Spack and one may use Python packages from Debian, Spack or as installed by the user in a Python virtual environment.
 
+** uv
+
+The [[https://docs.astral.sh/uv][uv]] tool is provided.  This is a fairly new tool on the Python scene but it already provides a wealth of benefits.  It can be used in many different modes to easily accomplish many Python related tasks:
+
+- Install various Python packages and of many versions without polluting global namespaces.
+- Install and make available various versions of Python itself.
+- Install Python packages so their main programs are available for your general use.
+- Assist in creating and managing Python projects.
+- Provide "better" versions of venv and pip.
+
+  
+
 ** Virtual environment
 :PROPERTIES:
 :CUSTOM_ID: python-venv
@@ -126,6 +138,8 @@ A user needing to install Python packages should do so in a venv and not ever vi
 The recommended way to provide a Python venv is via ~direnv~ as described in section [[#direnv-python]].  With more effort, a user may instead create one manually as described here:
 #+begin_example
 $ python -m venv myvenv
+## or
+$ uv venv [--python X.Y.Z] myvenv
 #+end_example
 To configure the shell environment:
 #+begin_example
@@ -139,6 +153,8 @@ $ deactivate
 Similar to the [[#direnv-python][direnv]] example, OS-installed Python packages can be leveraged by creating the venv with:
 #+begin_example
 $ python -m venv myvenv --system-site-packages
+## or
+$ uv venv --system-site-packages myvenv
 #+end_example
 
 ** Mixing Spack, Debian and pip packages
@@ -171,6 +187,7 @@ Only certain combinations of Spack, Debian and pip packages can be expected to w
   $ jupyter notebook --no-browser  # from the OS
   #+end_example
   Visit the web and test with ~import torch; print(torch.cuda.device_count())~.  See section [[#jupyter]] for more info about use of Jupyter.
+
 
 * Wire-Cell Toolkit
 
@@ -554,6 +571,26 @@ Now visit the URL in the browser and locate ~myenv~ under ~New->Notebook:~ menu.
 
 
 
+* Geant4
+
+Users / developers working inside an experiment stack will typically have Geant4 included in the dependency tree.  Others may utilize those instances of Geant4.  As usual ~spack find -lv geant4~ will list what is available.  Special-case builds of Geant4 will/can be made available.  
+
+** Support for DUNE FD3
+
+
+DUNE FD3 simulation uses ~geant4+qt+opengl+x11~
+
+#+begin_example
+$ wcwc spack find -lv geant4
+-- linux-debian12-x86_64 / gcc@12.2.0 ---------------------------
+wsqk5qa geant4@11.2.2~ipo~motif+opengl+qt~tbb+threads~timemory~vecgeom~vtk+x11 build_system=cmake build_type=Release cxxstd=17 generator=make
+#+end_example
+
+
+
+** Opticks
+A likely to-do item is to build Geant4 with support for Opticks.
+
 * DNNROI
 :PROPERTIES:
 :CUSTOM_ID: dnnroi
@@ -656,6 +693,8 @@ $ pip install torch torchvision torchaudio matplotlib h5py pillow pandas
 $ pip install tqdm tensorboard
 
 #+end_example
+
+
 
 
 
