@@ -466,6 +466,35 @@ $ wcwc shell -S wirecell -l ollamalux -c "ollama run aiden_lu/minicpm-v2.6:Q4_K_
 
 
 
+** Open WebUI
+
+You may simply chat with ollama via its ~ollama run ...~ command line interface
+while Open WebUI provides an alternative web front end.  It is a Python package
+and is run on a computer with access to ollama's API port as specified by
+~OLLAMA_HOST~ (8054 in this example).  Further, your browser must be able to
+access Open WebUI's HTTP server port (8080 in this example).
+
+You may install Open WebUI yourself with virtualenv + pip:
+#+begin_example
+python -m venv venv
+source venv/bin/activate
+OLLAMA_BASE_URL=http://127.0.0.1:8054/ open-webui serve
+#+end_example
+
+Alternatively, you may install and run via ~uv~:
+#+begin_example
+OLLAMA_BASE_URL=http://127.0.0.1:8054/ UV_PYTHON=3.12.3 uv run --with open-webui open-webui serve
+#+end_example
+
+You may access Open WebUI from your browser after fowarding:
+#+begin_example
+ssh -L 8080:localhost:8080 wcgpu0
+#+end_example
+
+http://127.0.0.1:8080/
+
+Select or add a model and start chatting.
+
 * Jupyter
 :PROPERTIES:
 :CUSTOM_ID: jupyter
