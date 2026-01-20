@@ -1,4 +1,4 @@
-#+title: WCWC Packages
+ 0u62;52;c#+title: WCWC Packages
 #+setupfile: wcwc-setup.org
 
 
@@ -116,7 +116,7 @@ There are several options for using Python and Python packages on WCWC workstati
 - uv ::  You need to work with many different, semi-independent Python environments and/or are developing your own Python project.  The ~uv~ tool is very powerful, flexible and highly recommended.  It replaces many older tools like ~venv~ but it may be new to you and so requires some (simple) learning.  Many packages will give examples on how to use ~venv~ and you will need to know to translate those instructions into ~uv~ usage. (see [[uv]] section below).  Use of ~uv~ will share packages between your different usages so can save storage space compared to use of ~venv~.  
 - venv :: You don't want to try new things.
 
-With all methods, ~direnv~ can be very helpful to manage and tie environment settings to a directory.  See section [[direnv]].
+With all methods, ~direnv~ can be very helpful to manage and tie environment settings to a directory.  See section [[#direnv]].
 
 ** uv
 :PROPERTIES:
@@ -788,7 +788,7 @@ Out[1]: [<matplotlib.lines.Line2D at 0x7f38adf35cd0>]
 
 Default use of ~jupyter~ (or ~ipython~) will have available any Python packages installed via Debian packages.  The user may require additional packages which can be provided via ~pip~ or Spack in the usual way, prior to running ~jupyter~.  See section [[#python]].
 
-To configure for such running, it is recommended to use [[#direnv][direnv]] with a ~.envrc~ file like:
+To configure for such running, it is recommended to use direnv with a ~.envrc~ file like:
 #+begin_example
 $ mkdir env-jupyter
 $ echo 'layout python3 --system-site-packages' > env-jupyter/.envrc
