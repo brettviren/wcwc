@@ -552,6 +552,44 @@ $ wcwc env -e test-env zstd
 $ wcwc shell -e test-env "zstd --version"
 #+end_example
 
+
 * Install a novel package to a Spack Environment
 
 t.b.d. (currently broken)
+
+* Stand-alone Spack builds
+:PROPERTIES:
+:CUSTOM_ID: stand-alone-spack
+:END:
+
+
+Most users will not require this but the admins and some users may want to have
+their own Spack install.  Admins should not attempt this with the ~wcwc~ account.
+Here, we use the example of developing the [[https://github.com/wirecell/wire-cell-spack][wire-cell-spack]] builder.
+
+First time:
+#+begin_example
+cd /nfs/data/1/bviren/standalone
+git clone \
+  -c feature.manyFiles=true --depth 1 --branch v0.23.1 \
+  https://github.com/spack/spack.git 
+mkdir scope
+cp spack/etc/spack/defaults/config.yaml scope/
+#+end_example
+See [[https://github.com/spack/spack/releases/][Spack releases]] for a suitable version.  Start a subshell: 
+#+begin_example
+bash --rcfile spack/share/spack/setup-env.sh
+export SPACK_USER_CONFIG_PATH=$(pwd)/scope
+spack config blame
+#+end_example
+This last checks that the configuration is using your custom scope and not mixing with WCWC scopes that any mixing with your default user scope under =~/.spack/= is acceptable.
+
+Now, we add the Spack repo that we want to develop:
+#+begin_example
+git clone git@github.com:WireCell/wire-cell-spack.git wct-spack
+spack repo add $(pwd)/wct-spack
+#+end_example
+And install the target.
+#+begin_example
+spack install wire-cell-toolkit@master+glpk+hdf+root+torch cuda_arch=89
+#+end_example

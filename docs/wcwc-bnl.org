@@ -847,10 +847,14 @@ And
 #+end_example
 
 ** Installing Spack packages
+:PROPERTIES:
+:CUSTOM_ID: install-spack-packages
+:END:
+
 
 Spack state modifications are performed on a read-write *copy* of ~/wcwc~ and never directly on ~/wcwc~  To make the copy:
 #+begin_example
-$ rsync wcwc@lycastus.phy.bnl.gov:/wcwc/ ~/wcwc-dev/
+$ rsync -a wcwc@lycastus.phy.bnl.gov:/wcwc/ ~/wcwc-dev/
 #+end_example
 To return changes:
 #+begin_example
@@ -892,6 +896,10 @@ In the future, the sync parts of this workflow may become incorporated into ~wcw
 #+end_note
 
 ** Developing Spack packages
+:PROPERTIES:
+:CUSTOM_ID: develop-spack-packages
+:END:
+
 
 It is common that a Spack package recipe must be updated, if only to bump the supported version(s).  Here is an example of that workflow, starting with entering the container (~c$~ prompt):
 #+begin_example
@@ -909,6 +917,24 @@ $ source spack/share/spack/setup-env.sh
 $ spack install arrayfire
 #+end_example
 Now, fix the build errors, push to a branch in the personal fork and from there make a PR to spack, proper.
+
+
+** Updating wire-cell-spack
+:PROPERTIES:
+:CUSTOM_ID: update-wct-spack
+:END:
+
+General (non-wcwc) instructions are at [[https://github.com/wirecell/wire-cell-spack][wire-cell-spack]].  Before WCWC can use
+them, any updates need to be pushed there.  To test that development, see
+[[file:wcwc-howto.org::#stand-alone-spack][Stand-alone Spack builds]].
+
+As ~wcwc@wcgpu0~ do these steps:
+
+#+begin_example
+rsync --archive --delete wcwc@lycastus.phy.bnl.gov:/wcwc/ ~/wcwc-dev/
+wcwc --image=yes --prefix=$HOME/wcwc-dev shell
+
+#+end_example
 
 
 

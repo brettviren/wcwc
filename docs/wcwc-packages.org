@@ -218,7 +218,13 @@ Only certain combinations of Spack, Debian and pip packages can be expected to w
 :CUSTOM_ID: wct
 :END:
 
-For developing WCT against Spack packages see: [[file:wcwc-howto.org::#spack-view-wct]].
+- For developing WCT against Spack packages see: [[file:wcwc-howto.org::#spack-view-wct]].
+
+- See [[file:wcwc.org::#install-packages][this section]] for general installation.
+
+- See [[file:wcwc-bnl.org::#install-spack-packages][this section]] for BNL specifics on installing wcwc Spack packages and [[file:wcwc-bnl.org::#update-wct-spack][this section]] for specifics on updating wire-cell-spack.
+
+
 
 * CUDA
 :PROPERTIES:
@@ -653,6 +659,53 @@ This use of LiteLLM with no API key or other auth is very insecure and should ne
 #+end_note
 
 Save and when starting a New Chat the models from the LiteLLM YAML configuration file should be listed and accessible.
+
+
+
+* Aider
+
+The =aider= program gives a simple command line interface with a powerful set of LLM-assisted software development features.  Installation is easy with =uv=
+
+#+begin_example
+$ uv tool install [--force --upgrade] --python python3.12 aider-chat
+$ aider --help
+$ aider --model=MODEL --api-key PROVIDER=KEY
+#+end_example
+There are a lot of options.  Here are some likely ones and examples are below
+
+- =--no-auto-commits= By default, aider will =git commit= after each round with the LLM.  If you want to handle commits yourself, use this flag.
+
+
+** Aider + Gemini
+
+Use with free Gemini
+
+#+begin_example
+$ cd my-source-area/
+$ aider --model gemini/gemini-flash-latest --api-key gemini=KEY [...]
+#+end_example
+
+You will need to get a =KEY= from Google.  Sign in at https://aistudio.google.com and look for Get API Key and Create API Key, copy it and store it securely.  Keep it out of any files managed by git.  The key starts with the string =AIza=.
+
+By default, each round of chat with the LLM will (may) change your code and will commit.  If you would prefer to handle commits yourself add:
+
+#+begin_example
+--no-auto-commits
+#+end_example
+
+** Aider + Azure
+
+Microsoft Azure provides access to many LLMs and =aider= knows how to use them.
+
+#+begin_example
+$ export AZURE_API_BASE=https://RESOURCE.openai.azure.com/
+$ export AZURE_API_VERSION=2025-09-01 
+$ AZURE_API_KEY=KEY
+$ aider  --model azure/DEPLOYMENT [...]
+#+end_example
+
+BNL provides licenses to use Microsoft Azure.  The model name is actually the "deployment" name.  You make a "deployment" through your Azure account.
+
 
 * Jupyter
 :PROPERTIES:

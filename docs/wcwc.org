@@ -672,6 +672,9 @@ $ wcwc admin init --tag develop spack
 
 
 ** Installing packages
+:PROPERTIES:
+:CUSTOM_ID: install-packages
+:END:
 
 Installing packages with ~wcwc~ requires naming their spec.  Eg:
 #+begin_example
@@ -702,6 +705,9 @@ The spec to install can be left ambiguous.  Spack will remove ambiguity through 
 #+end_note
 
 ** Defining system environments
+:PROPERTIES:
+:CUSTOM_ID: define-sys-env
+:END:
 
 Almost identically to defining user environments, the admin may define "system" environments.  These are defined under ~WCWC_PREFIX~ and so can be used by all users.  The only difference is:
 - Must run in a podman container if the general ~WCWC_PREFIX~ was built side one.
