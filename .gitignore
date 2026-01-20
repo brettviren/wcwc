@@ -13,3 +13,4 @@ build
 dist
 *.app
 images
+cut

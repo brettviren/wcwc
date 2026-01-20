@@ -1,0 +1,103 @@
+#+title: Guide to using Claude Code and Beads
+#+setupfile: wcwc-setup.org
+
+* Access
+
+See [[./wcwc-azure.org]] for how to get BNL to pay for your access to Anthropic models and how to configure Claude Code (CC).
+
+* First use
+
+In a repo as yet untouched, run the =claude= command and initialize
+
+#+begin_example
+/init
+#+end_example
+
+CC will "analyze" your code and offer to save a =CLAUDE.md= file with a summary for later invocations of CC to read.  This provides a primitive memory cache.
+
+To exit
+
+#+begin_example
+/exit
+#+end_example
+
+Or a fast =C-d C-d= or =C-c C-c=.
+
+* Using Beads
+
+Beads is a local issue tracker that has become a way to augment Claude Code or
+other LLM agents.  Issues may depend on other issues and serve as a complex plan management storage.  An agent may be told simply "Address Beads issue xyz-abc and add a comment with what you have done prior to closing it" and it will do so.
+
+** Installing
+
+Though this is always a bit sketchy:
+
+#+begin_example
+curl -fsSL https://raw.githubusercontent.com/steveyegge/beads/main/scripts/install.sh | bash
+#+end_example
+
+Reading =install.sh= before executing is strongly recommended.  As of the time of writing it is safe.
+
+** Initialize a repo for beads
+
+#+begin_example
+cd my-code/
+bd init
+#+end_example
+
+To see some initial guidance
+
+#+begin_example
+bd quickstart
+#+end_example
+
+Some automated house keeping
+
+#+begin_example
+bd doctor --fix
+#+end_example
+
+Hit "(y)es" and then check warnings for things to do manually.  In particular, this command may be desirable to make beads use its own git branch to hold its info and avoid beads commits to your main branch:
+
+#+begin_example
+bd migrate sync beads-sync
+#+end_example
+
+From time to time you may want to do:
+
+#+begin_example
+bd sync
+#+end_example
+
+This will synchronize the sqlite3 cache with the JSONL file committed to the
+repo.
+
+** Using Beads with Claude Code
+
+*** Teaching CC to use =bd=
+
+Beads will add =AGENTS.md= with general instructions for LLM agents on how to use beads.  CC-specific setup is done with:
+#+begin_example
+bd setup claude
+#+end_example
+
+#+begin_note
+*Preference*
+I like to add to the "quick reference" section in =AGENTS.md= how the agent can comments to a beads issue:
+
+#+begin_example
+bd comments add <id> "The comment message"  # Append comments to an issue
+#+end_example
+
+I then instruct the LLM to add a comment summarizing changes that it makes.  It is sort of like a git commit message but I still tend to want to do my own git commits. 
+#+end_note
+
+*** Beads plugin to CC
+
+A [[https://github.com/steveyegge/beads/blob/main/docs/PLUGIN.md][beads plugin for claude code]] can be added in CC.  See the link for details including assuring =uv= is available then in CC:
+
+#+begin_example
+/plugin marketplace add steveyegge/beads
+/plugin install beads
+#+end_example
+

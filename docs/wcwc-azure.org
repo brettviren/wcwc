@@ -1,4 +1,5 @@
 #+title: Guidance on getting access to LLMs in BNL Azure
+#+setupfile: wcwc-setup.org
 
 BNL provides access to Microsoft Azure AI which includes many "top brand" LLMs
 from OpenAI and Anthropic and others (but not Gemini) as well as a special
@@ -6,29 +7,26 @@ from OpenAI and Anthropic and others (but not Gemini) as well as a special
 prompt.  The Azure AI provides both chat UI and API access.  This document
 collects info to help others make use of this resource.
 
-* BNL Azure access
+* BNL Azure access roles
 
-Azure has a complex accounting system but here only two types of access are
-considered.
+Azure has a complex accounting system.  For this document we consider only two roles:
 
 - subscriber :: The user has ability to make "deployments" and assumes cost management duties (charged to a BNL project/activity code).
-- API-only :: The user is given an API key and endpoint URL for one or more LLM "deployments" made by a subscriber.
+- API-only :: The user is given an *API key* and *endpoint URL* for one or more LLM "deployments" by a subscriber.
 
-Jump to [[API Only]] to skip the laborious subscriber instructions.
+If you want to be an API-only user, jump to section [[API Only]] to skip the laborious subscriber instructions.
 
 ** Subscriber access to BNL Azure
 
 Gaining subscriber access is somewhat involved.  API-only access is fairly
-trivial but requires someone to serve you as a subscriber.  One efficient
-pattern is to have one person in a group be the subscriber and others be
-API-only.  If/when the subscriber duties become overwhelming, the group may
-spread the duty across more than one subscriber.
+trivial but requires someone to serve you as a subscriber.  A group may want to
+start with just one user providing the subscriber duties.
 
 *** Requesting a subscriber account
 
 This guidance is as of 2026-01-01 and may have changed.
 
-- A user contacts ITD requesting a subscriber account to BNL Azure
+- A user contacts ITD requesting a *subscriber account* to BNL Azure
 
 - ITD will give user a customized web form to fill out.
 
@@ -55,7 +53,7 @@ Once the initial password is plain text, log into
 https://myprofile.microsoft.com and set up two-factor authentication.  Note,
 "FIDO2" means Yubikey.
 
-Once the new account is all settled, one more loop with ITD is needed to get access to Azure.  You can then log in to https://portal.azure.com/ 
+Once the new account is all settled, one more loop with ITD is needed to get access to Azure.  You can then log in to https://portal.azure.com/ and deploy models.
 
 *** Deploying a model in Azure
 
@@ -73,18 +71,29 @@ The endpoint is a URL like:
 This URL may be more specific than needed to access the API.
 
 
+*** Linking subscriber accounts
+
+It is possible to have one subscriber account linked to another so that only one
+deals with billing issues while both may perform deployments.
+
+Details t.b.d.
+
 ** API Only
 
-Ask a subscriber for the API "endpoint URL" and "key".
+Ask a subscriber for an "endpoint URL" and "API key".
 
-The URL provided is typically not exactly in a the form required for your your API client but includes salient parts that you must supply.  In general the URL will look like:
+The URL you will be given is typically not exactly in a the form required by
+your API client but it will include salient parts.  In general, Azure endpoint
+URLs will have three parts to set properly.
 
 #+begin_example
 https://{resource}.{domain}/{path}
 #+end_example
 
-- resource :: this typically includes the subscriber user ID plus some other text and it names a set of "deployments".  You will typically keep the *resource* string as-is when configuring your API client.
-- domain :: this may be =openai.azure.com=, =services.ai.azure.com= or something else.  You may need to use totally different domains for a given client and depending on the LLM model in the "deployment".
+- resource :: this typically includes the subscriber user ID plus some other text and it names a set of "deployments".  You will typically keep the *resource* string as-is when configuring your API client.  Some clients need be given only the *resource* string and not a full URL.
+- domain :: this may be =openai.azure.com=, =services.ai.azure.com= or something else.  You may need to use totally different domains for a given client and depending on the LLM model in the "deployment".  Some clients may want to switch the domain depending on the LLM (eg, OpenAI compatible access vs other).
+- path :: the exact path to use may differ from what is provided and depend on the client, the LLM to access (again, OpenAI vs other) or other things.
+
 
 * Configuring client to use Azure AI
 
@@ -102,7 +111,9 @@ $ export AZURE_API_BASE=https://RESOURCE.services.ai.azure.com
 - key :: The API key
 - base :: The shortened endpoint URL
 
-I do not know how to get a correct *version* in general.  Both *key* and *base* info is available to the subscriber from, eg, the chat UI for the deployment.  Note, the *base* URL is shorter than the presented endpoint URL.
+#+begin_note
+I do not know how to get a correct *version* in general.  Please let me know if you do.  Both *key* and *base* info is available to the subscriber from, eg, the chat UI for the deployment.  Note, the *base* URL is shorter than the presented endpoint URL.
+#+end_note
 
 *** Anthropic models and aider
 
@@ -141,7 +152,20 @@ t.b.d.
 
 Currently not applicable to Azure.
 
-* A note on API key security
+* Appendix 
+
+** Azure glossary
+
+Please contact the author with any additions and corrections.
+
+- api key :: Azure API keys are 84 character strings
+- endpoint :: an API URL which may or may not be fully in a form ready to use by an API client
+- resource :: a unit of accounting (aka "resource group"?)
+- deployment :: an instance of an LLM often but not necessarily taking the same name as the deployed model.
+- foundry :: or "AI foundry" a unit in which deployments are made and served.
+- subscriber :: the account that pays the bills and makes the deployments
+
+** A note on API key security
 
 The API key and resource name are the only "secrets" needed to incur potentially
 substantial costs.  Do not commit these secrets into repos or otherwise make
