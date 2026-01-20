@@ -1,0 +1,96 @@
+#+title: Guidance on getting access to LLMs in BNL Azure
+
+BNL provides access to Microsoft Azure which includes many "top brand" LLMs from
+OpenAI and Antrhopic and others (but not Gemini).  This provides both chat UI and API access.  This document collects info to help others walk down this path.
+
+* Gaining access to BNL Azure
+
+This guidance is as of 2026-01-01 and may have changed.
+
+- Ask me or others for the ITD contact.  You will get an email with a link to a web form.
+
+- Form will include a link for requesting a *new* Microsoft account separate from
+  your current BNL Active Directory or Office365 account.
+
+- Form will include a link for requesting a Yubikey which is needed to
+  authenticate the new account.  You can also use DUO but will need to set that
+  up in addition to DUO for your regular account.
+
+- You may be requested to install Microsoft Authenticator app but that is
+  apparently not ever actually needed.
+
+You'll get email with more instructions after your new Office365 account is
+made.  It has details but here are some highlights:
+
+- When the new account is ready you will need to log into
+  https://myprofile.microsoft.com and to do that you will be given a temporary
+  password encrypted with some Microsoft junk.
+
+- If you already have an Office365 account the link to decrypt should work
+  (presumably).
+
+- If you do not (like me) you can try to log in to https://portal.office.com/
+  and with your BNL AD account using DUO and then the link to the encrypted
+  temporary password should work.
+ 
+- During login with the new account you will need to set up 2nd factor which is
+  where the Yubikey comes in (or DUO).  Yubikey only should be enough though
+  future logins will initially still say DUO.
+
+Once the new account is all settled, one more loop with ITD is needed to get access to Azure.  You can then log in to https://portal.azure.com/
+
+* Deploying a model in Azure
+
+1. Sign in to https://ai.azure.com/ with your new Office365 account.
+2. If not already, create a new "foundry" (slide box at top of page).
+3. Pick a model and "deploy" it with the deploy button. 
+4. From the deployed model chat UI you can get API key and endpoint
+
+The endpoint is a URL like:
+
+   https://USERNAME-ID-resource.services.ai.azure.com/api/projects/USERNAME-ID
+
+This URL may be more specific than needed to access the API.
+
+Unless you are prepared to pay for the entire Internet using your account, do not store you API keys in public places.  In particular, do not commit them to files in code repos.  Personally, I place all secrets in a [[https://www.passwordstore.org/][zx2cf password store]] to make it easy for scripts to access them while keeping them encrypted at rest.
+
+* Using Aider with Azure deployments
+
+Aider needs 3 shell environment variables:
+
+#+begin_example
+$ export AZURE_API_VERSION=2024-12-01-preview
+$ export AZURE_API_KEY=KEY
+$ export AZURE_API_BASE=https://USERNAME-ID-resource.services.ai.azure.com
+#+end_example
+
+- version :: This is a magic value.  I have no idea how to properly determine it.  Get it wrong and things won't work.
+- key :: The API key available from the chat page of your depoloyment
+- base :: The shortened endpoint URL
+
+** Anthropic models
+
+Azure supplies models from Anthropic but I am unable to talk with them as of
+aider 0.86.1.  However, using the =anthropic.AnthropicFoundry= Python class and the above =AZURE= info, can establish connection and get a response to a prompt.  I suspect there is a problem in lightlm bundled with aider related to the construction of the API URL.
+
+* Using Claude Code
+
+** With an Anthropic model deployment
+
+#+begin_example
+$ export CLAUDE_CODE_USE_FOUNDRY=1
+$ export ANTHROPIC_FOUNDRY_API_KEY=KEY
+$ export ANTHROPIC_FOUNDRY_RESOURCE=RESOURCE 
+$ claude
+#+end_example
+
+Here, =RESOURCE= is just the "host name" in the Azure AI endpoint URL and not the entire URL.
+
+More info at https://code.claude.com/docs/en/model-config
+
+** With OpenAI model deployment
+
+t.b.d.  Some say it's not possible, some say it is.
+
+* Using Codex CLI
+
