@@ -1,0 +1,35 @@
+* 
+
+#+begin_example
+$ wcwc shell -c 'spack env create --dir spack-env'
+==> Created independent environment in: /home/bv/spack-env
+==> Activate with: spack env activate spack-env
+$ wcwc shell -c 'spack -e spack-env add py-numpy'
+==> Adding py-numpy to environment /home/bv/spack-env
+$ wcwc shell -c 'spack -e spack-env concretize'
+==> Concretized 1 spec:
+...big spec...
+==> Updating view at /home/bv/spack-env/.spack-env/view
+$ ls spack-env/.spack-env/view/
+bin  etc  include  lib  lib64  libexec  man  pyvenv.cfg  sbin  share
+#+end_example
+
+#+begin_example
+$ wcwc -L debug env -e wcwc-env py-numpy
+$ ls -l wcwc-env/.spack-env/view/
+total 0
+#+end_example
+
+Select debug output:
+
+#+begin_example
+exec: cmd='/wcwc/spack/bin/spack env create --dir /home/bv/wcwc-env' opts={'capture_output': False, 'shell': True, 'check': False}
+==> Created independent environment in: /home/bv/wcwc-env
+==> Activate with: spack env activate /home/bv/wcwc-env
+exec: cmd='/wcwc/spack/bin/spack -e /home/bv/wcwc-env add py-numpy' opts={'capture_output': False, 'shell': True, 'check': False}
+==> Adding py-numpy to environment /home/bv/wcwc-env
+exec: cmd='/wcwc/spack/bin/spack -e /home/bv/wcwc-env concretize' opts={'capture_output': False, 'shell': True, 'check': False}
+==> Concretized 1 spec:
+...big spec...
+
+#+end_example

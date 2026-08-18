@@ -1,0 +1,14 @@
+#+title: Enabling .... title from PD proposal
+
+* Introduction
+
+The PD, the system and ecosystem, shake down with DNN-ROI...
+
+* 
+
+* ...
+* Issues found
+
+- control build host with containers and all the great things that enables
+- control build architecture
+- 

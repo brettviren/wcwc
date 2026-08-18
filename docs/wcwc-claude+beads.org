@@ -101,3 +101,38 @@ A [[https://github.com/steveyegge/beads/blob/main/docs/PLUGIN.md][beads plugin f
 /plugin install beads
 #+end_example
 
+
+** Using Beads with your human
+
+This section is a subjectively curated collection of ways for a human to make
+use of beads.  YMMV.
+
+*** Documentation driven development aka planning
+
+I often being developing by writing documentation.  It's rare that this initial documentation survives the development but it helps me to get ideas down so I can refer to them later.
+
+Beads can add structure to this practice by using issues to hold thoughts and issue dependencies to give them hierarchical structure.
+
+#+begin_example
+$ bd create --title "My main thing" --description "Initial thoughts but will later edit"
+>>> pkg-abc
+$ bd create --title "My detail" --description "Some aspect of the main thing" --parent pkg-abc
+>>> pkg-xyz
+$ bd create --title "Another thought"
+>>> pkg-pdq
+$ bd dep add pkg-pdq pkg-xyz
+
+$ bd list
+$ bd graph --all
+$ bd edit pkg-abc --design
+$ bd show pkg-abc
+#+end_example
+
+I write these with Claude as my audience.  Later I can call Claude to work on a
+specific issue or tell it to use the next ready issue which Claude finds by
+running:
+
+#+begin_example
+$ bd ready
+#+end_example
+

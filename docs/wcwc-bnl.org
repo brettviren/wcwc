@@ -8,7 +8,7 @@
 #+end_src
 
 #+begin_src sh :results output drawer
-scp wcwc-bnl.html hierocles.phy.bnl.gov:public_html/wire-cell/docs/
+scp wcwc-bnl.html hierocles.phy.bnl.gov:public_html/wcwc/docs/
 #+end_src
 
 #+RESULTS:
@@ -344,6 +344,18 @@ Do you need to use a private key other than what is loaded into Physics dept IDM
 Contact the WCWC admin.
 
 
+
+
+** Monitoring
+
+*** Immediate
+- top :: venerable CPU/mem process monitor 
+- btop :: better version of top
+- nvtop :: monitor GPUs
+
+*** Historical
+
+t.b.d.
 
 * Developer
 :PROPERTIES:
@@ -928,14 +940,24 @@ General (non-wcwc) instructions are at [[https://github.com/wirecell/wire-cell-s
 them, any updates need to be pushed there.  To test that development, see
 [[file:wcwc-howto.org::#stand-alone-spack][Stand-alone Spack builds]].
 
-As ~wcwc@wcgpu0~ do these steps:
-
+As ~wcwc@wcgpu0~ be sure to start with a fresh sync from production:
 #+begin_example
-rsync --archive --delete wcwc@lycastus.phy.bnl.gov:/wcwc/ ~/wcwc-dev/
-wcwc --image=yes --prefix=$HOME/wcwc-dev shell
-
+$ rsync --archive --delete wcwc@lycastus.phy.bnl.gov:/wcwc/ ~/wcwc-dev/
 #+end_example
-
+When lucky, you can install in one go with, eg:
+#+begin_example
+$ spack install wire-cell-toolkit@0.34.2+glpk+hdf+root+torch cuda_arch=89
+#+end_example
+If/when that fails, run interactively in order to see the errors:
+#+begin_example
+$ wcwc --image=yes --prefix=$HOME/wcwc-dev shell -S wirecell
+root@b979da087bce:/wcwc# wcwc admin install -S wirecell wire-cell-toolkit@0.34.2+glpk+hdf+root+torch cuda_arch=89
+root@b979da087bce:/wcwc# cat /wcwc/stage/root/spack-stage-wire-cell-toolkit-0.34.2-dbggxshurv63qwtq4pqjxg4dobecanz4/spack-build-out.txt
+#+end_example
+After fixing, exit the container and sync the results back to production
+#+begin_example
+$ rsync -av ~/wcwc-dev/  wcwc@lycastus.phy.bnl.gov:/wcwc/
+#+end_example
 
 
 ** The ~/srv~ mount

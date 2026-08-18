@@ -1,0 +1,76 @@
+#+title: BNL SCDF/SDCC
+#+setupfile: wcwc-setup.org
+
+* Intro
+
+BNL's SCDF (ne SDCC) is not directly related to WCWC but a lot of use and users
+are adjacent.  For example, wcgpu workstations are intended for development and
+short running test jobs.  Long running production jobs should NOT be run on
+wcgpu machines if they interfere with development activities.  SDCC does have
+some GPU nodes intended for use in DUNE Prompt Processing R&D but which can be
+lightly used for related work.
+
+* Jupyter
+
+SDCC's JupyterHub can (should[fn:whereforartgpu]) access GPU nodes or CPU-only nodes.
+
+- https://jupyter.sdcc.bnl.gov/run/hub/home
+
+
+[fn:whereforartgpu] GPU access seems missing.
+
+
+* HTCondor
+
+DUNE GPU nodes accept HTCondor jobs.  You can see what GPUs are out there:
+
+#+begin_example
+bvlbne@dunesub01:~> condor_status -constraint 'TotalGpus > 0' -af Machine TotalGpus GPUs_DeviceName GPUs_Capability                                                                                
+sgpu0001.usatlas.bnl.gov 4 undefined undefined
+sgpu0001.usatlas.bnl.gov 4 NVIDIA A100 80GB PCIe MIG 1g.10gb undefined
+sgpu0002.usatlas.bnl.gov 4 undefined undefined
+sgpu0002.usatlas.bnl.gov 4 NVIDIA A100 80GB PCIe MIG 2g.20gb undefined
+sgpu0003.sdcc.bnl.gov 8 NVIDIA L40S 8.9
+sgpu0003.sdcc.bnl.gov 8 NVIDIA L40S 8.9
+sgpu0004.sdcc.bnl.gov 8 NVIDIA L40S 8.9
+#+end_example
+
+That last one belongs to DUNE Prompt Processing.
+
+Here is a job script that will match against one of the L40S computers.
+
+#+begin_example
+num_gpus = 1
+
+transfer_executable = False
+executable     = /usr/bin/nvidia-smi
+universe       = vanilla
+output         = nvidia_smi.$(Cluster).$(Process).out
+error          = nvidia_smi.$(Cluster).$(Process).err
+log            = nvidia_smi.log
+
+# Request the GPU resources from the slot
+request_gpus   = $(num_gpus)
+
+# Define the specific hardware requirements
+# We use '==' for exact string matching and '>=' or '==' for capability
+Requirements = (GPUs_DeviceName == "NVIDIA L40S") && (GPUs_Capability == 8.9)
+
+# Ensure the job is sent to the correct execution environment
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+
+queue 1
+#+end_example
+
+
+* meta :noexport:
+
+#+begin_src sh :results output drawer
+scp wcwc-sdcc.html hierocles.phy.bnl.gov:public_html/wcwc/docs/
+#+end_src
+
+#+RESULTS:
+:results:
+:end:
+

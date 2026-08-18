@@ -32,14 +32,16 @@ This guidance is as of 2026-01-01 and may have changed.
 
 - The form lists and links additional requests that must be made.  
 
-  - Two-factor authentication :: The form lists Microsoft Authenticator movile
-    application and Yubikey but not DUO.  Microsoft Authenticator is not
-    required at least if Yubikey is used.  During the onbording process, DUO is
-    also offered and it may be possible to use that instead of Yubikey.
+  - Two-factor authentication :: The form lists *Microsoft Authenticator* (MA)
+    mobile application and *Yubikey* but not *DUO*.  Use of Yubikey or DUO are both
+    confirmed to be working.  I have no report that MA.
 
   - Microsoft Office365 account :: A new Microsoft Office365 account is required
     in addition to an existing the "BNL Domain" account.  The new account name
-    seems to be chosen with "365" appended to the BNL Domain account.
+    seems to be chosen with "365" appended to the BNL Domain account.  *Note* this
+    new account may no longer be required and your existing ~@bnl.gov~ address may
+    be enough.
+
 
 After submitting the form and after obtaining the new Microsoft Office365
 account, you will get an email from ITD with initial Azure onboarding
@@ -177,3 +179,9 @@ in password store and transfer it to environment variables in a way that no
 plain-text file is involved.
 
 For a home-grown mechanism to do this, see https://github.com/brettviren/passdb
+
+* meta :noexport:
+#+begin_src sh :results output drawer :results none
+scp wcwc-azure.html hierocles.phy.bnl.gov:public_html/wcwc/docs/
+#+end_src
+

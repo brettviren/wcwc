@@ -1,0 +1,113 @@
+#+title: Monitoring on BNL WCWC
+
+* Overview
+
+Monitoring has three types of participants:
+
+- A central Grafana service provides web-based visualization of metrics.
+
+  - Grafana is *highly* (painfully so) configurable
+
+- A central Prometheus service provides metrics to Grafana
+
+  - It also provides simple, high level status web pages.
+
+  - Metrics are available "live" and are stored over time.
+
+- One or more "exporters" provide metrics to the Prometheus service  
+
+  - Prometheus exporter provides basic system metrics (cpu, memory, temperatures, etc)
+
+  - A special GPU exporter gives information about the GPUs
+
+  - Exporters are polled by the Prometheus service.
+
+The two central services live on lycastus.  To start with, they are only
+accessed via localhost with all system ports access controlled by firewalld.
+
+* Lycastus setup
+
+As root,
+#+begin_example
+apt install prometheus firewalld
+
+mkdir -p ~/monitoring/grafana/data
+podman run -d --name grafana --add-host host.containers.internal:130.199.22.68 -p 3000:3000 \
+  -v ~/monitoring/grafana/data:/var/lib/grafana:Z docker.io/grafana/grafana
+
+sudo podman generate systemd --name grafana --files --new
+sudo systemctl daemon-reload
+sudo systemctl enable container-grafana.service
+sudo systemctl start container-grafana.service
+
+systemctl status container-grafana.service
+#+end_example
+
+** Prometheus config
+
+Configure prometheus collector
+
+#+begin_example
+global:
+  scrape_interval:     15s
+  evaluation_interval: 15s
+
+scrape_configs:
+
+  - job_name: 'remote_nodes'
+    static_configs:
+      - targets: ['host.containers.internal:9100', 'wcgpu0:9100', 'wcgpu1:9100']
+
+  - job_name: 'gpu_nodes'
+    static_configs:
+      - targets: ['wcgpu0:9835', 'wcgpu1:9835']
+#+end_example
+
+** Grafana config
+
+For now, to access Grafana
+
+#+begin_example
+ssh -L 13000:localhost:3000 lycastus.phy.bnl.gov
+web-browser http://localhost:13000
+#+end_example
+
+Import dashboards:
+
+
+- 1860 Node Exporter Full
+- [[https://grafana.com/grafana/dashboards/14574-nvidia-gpu-metrics/][14574 nvidia gpu metrics]]
+
+* Node setup
+
+** Debian
+
+#+begin_example
+apt install prometheus-node-exporter firewalld
+wget https://github.com/utkuozdemir/nvidia_gpu_exporter/releases/download/v1.4.1/nvidia-gpu-exporter_1.4.1_linux_amd64.deb
+dpkg -i nvidia-gpu-exporter_1.4.1_linux_amd64.deb
+
+#+end_example
+
+* TODO Firewall
+
+#+begin_example
+# 1. Ensure the ports are NOT globally open (clean up previous tests)
+sudo firewall-cmd --permanent --remove-port=9100/tcp
+sudo firewall-cmd --permanent --remove-port=9835/tcp
+
+# 2. Add Rich Rules to allow ONLY lycastus (replace 128.x.y.z with its actual IP)
+sudo firewall-cmd --permanent --add-rich-rule='rule family="ipv4" source address="128.x.y.z" port protocol="tcp" port="9100" accept'
+sudo firewall-cmd --permanent --add-rich-rule='rule family="ipv4" source address="128.x.y.z" port protocol="tcp" port="9835" accept'
+
+# 3. Reload to apply changes
+sudo firewall-cmd --reload
+
+# check
+sudo firewall-cmd --list-rich-rules
+
+# check default allow
+sudo firewall-cmd --zone=public --get-target
+# assure default allow
+sudo firewall-cmd --permanent --zone=public --set-target=ACCEPT
+#+end_example

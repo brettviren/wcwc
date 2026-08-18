@@ -14,3 +14,10 @@ dist
 *.app
 images
 cut
+.beads
+.lock-waf*
+.webui_secret_key
+*.md
+install
+__pycache__
+ltximg

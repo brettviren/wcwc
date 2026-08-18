@@ -1,0 +1,48 @@
+#+title: WCWC Open Issues and Ideas
+#+setupfile: wcwc-setup.org
+
+* meta :noexport:
+
+#+begin_src sh :results output drawer
+scp wcwc-open.html hierocles.phy.bnl.gov:public_html/wire-cell/docs/
+#+end_src
+
+#+RESULTS:
+:results:
+:end:
+
+
+* Overview
+
+This document collects discussion on open ideas and issues for WCWC.
+
+* Debian vs Spack
+
+Both Debian and Spack provide packages to WCWC users.  This section compares and contrasts these two package sources and outlines the implications of supporting the dichotomy.
+
+** Why Debian
+
+Some reasons to use Debian as a source of packages instead of Spack:
+
+- An order of magnitude more packages than Spack.
+- On average, Debian packages are more up to date than Spack's.
+- Binary installation is fast and problem free.
+- Package integration problems solved by Debian devs.
+- Debian provides a good balance between stability and freshness (O(1 year) updates, longer support, in-place upgrades).
+
+** Why Spack
+
+Some reasons to use Spack  as a source of packages instead of Debian:
+
+- Spack builds packages that are not in Debian (eg: experiment "middleware" like ROOT, art, WCT and stack-topping experiment software packages like those for DUNE, SBND).
+- Users require multiple versions of packages to be available contemporaneously.
+
+** Python
+
+A third option arises when one considers a Python ecosystem.  Both Debian and Spack package some Python based projects.  Another option is to use ~pip~ to assemble packages in a Python virtual environment.  Anaconda based assembly is popular in some communities but it will not be considered here.
+
+Spack packaging of Python-based packages is particularly problematic due to two issues.  First is the general problem of package age combined with the fact that Python-based packages tend to evolve quickly.  Second is that both Spack and the underlying Python packaging can specify version constraints.  This can make it difficult or even impossible to install coherent software suites.  In some cases, the problem is inherent to poorly written Python packages by their upstream developers while Spack's additional version constraint layer merely obscures the problems.
+
+** Policy about package sources
+
+Package installation via Spack or Debian is driven by user need.  Users should make requests for packages to the WCWC admin.  Some package installation can require substantial effort and so installation requests may require discussion to judge if the package is truly required, evaluate possible substitutes and determine what options may be optimal.

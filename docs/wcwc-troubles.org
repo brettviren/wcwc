@@ -1,0 +1,19 @@
+#+title WCWC Troubles
+#+setupfile: wcwc-setup.org
+
+This document collects some troubles you may encounter and how to solve them.
+
+* Forgot to specify a stack
+
+A ~wcwc~ command may fail with an error like:
+
+#+begin_example
+$ wcwc view -d wct -e wire-cell-toolkit -s "wire-cell-toolkit/q3zolqz" wct/local
+==> Error: Unknown namespace: wirecell
+#+end_example
+
+This is due to a request for some package that is in a stack (namespace) that Spack was not told to check.  The solution is to include the stack name.
+
+#+begin_example
+$ wcwc view -S wirecell -d wct -e wire-cell-toolkit -s "wire-cell-toolkit/q3zolqz" wct/local
+#+end_example
